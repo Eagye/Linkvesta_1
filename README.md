@@ -200,4 +200,3 @@ Add new migration files in `backend/database/migrations/` following the naming c
 ## License
 
 MIT
-
