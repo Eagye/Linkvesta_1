@@ -1,0 +1,19 @@
+{
+  "name": "linkvesta-backend",
+  "version": "1.0.0",
+  "description": "LinkVesta Microservices Backend",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:auth\"",
+    "dev:api": "cd services/api && npm run dev",
+    "dev:auth": "cd services/auth && npm run dev",
+    "build": "npm run build:api && npm run build:auth",
+    "build:api": "cd services/api && npm run build",
+    "build:auth": "cd services/auth && npm run build",
+    "install:all": "npm install && cd services/api && npm install && cd ../auth && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+
