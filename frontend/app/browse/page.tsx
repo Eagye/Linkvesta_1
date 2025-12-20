@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import Link from 'next/link';
 
 interface Business {
   id: number;
@@ -10,149 +10,12 @@ interface Business {
   category: string;
   description: string;
   categoryColor: string;
-  logoUrl?: string;
 }
 
-// Fallback businesses for optimistic UI
-const fallbackBusinesses: Business[] = [
-  {
-    id: 1,
-    name: 'Solarify',
-    category: 'Energy',
-    description: 'Pay-as-you-go solar solutions for off-grid communities.',
-    categoryColor: '#fbbf24'
-  },
-  {
-    id: 2,
-    name: 'EduLearn',
-    category: 'Ed-Tech',
-    description: 'AI-driven personalized learning for WASSCE students.',
-    categoryColor: '#a855f7'
-  },
-  {
-    id: 3,
-    name: 'LogiTrak',
-    category: 'Logistics',
-    description: 'Last-mile delivery infrastructure for e-commerce.',
-    categoryColor: '#6b7280'
-  }
-];
-
-// Logo Component with fallback
-function BusinessLogo({ business }: { business: Business }) {
-  const [imageError, setImageError] = useState(false);
-
-  if (business.logoUrl && !imageError) {
-    return (
-      <img
-        src={business.logoUrl}
-        alt={`${business.name} logo`}
-        style={{
-          width: '80px',
-          height: '80px',
-          borderRadius: '50%',
-          objectFit: 'cover',
-          marginBottom: '0.5rem',
-          border: '2px solid #e5e7eb',
-          backgroundColor: '#f3f4f6'
-        }}
-        onError={() => setImageError(true)}
-      />
-    );
-  }
-
-  // Fallback: Show initial letter with gradient background
-  return (
-    <div style={{
-      width: '80px',
-      height: '80px',
-      borderRadius: '50%',
-      background: `linear-gradient(135deg, ${business.categoryColor || '#6b7280'}, ${business.categoryColor || '#6b7280'}dd)`,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: '0.5rem',
-      color: 'var(--linkvesta-white)',
-      fontSize: '1.5rem',
-      fontWeight: 'bold',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-    }}>
-      {business.name.charAt(0).toUpperCase()}
-    </div>
-  );
-}
-
-// Skeleton Loader Component
-function BusinessCardSkeleton() {
-  return (
-    <div
-      style={{
-        backgroundColor: 'var(--linkvesta-white)',
-        border: '1px solid #e5e7eb',
-        borderRadius: '8px',
-        padding: '2rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1rem',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        position: 'relative',
-        overflow: 'hidden'
-      }}
-    >
-      {/* Shimmer effect */}
-      <div className="skeleton-shimmer" />
-      <div
-        style={{
-          width: '80px',
-          height: '80px',
-          borderRadius: '50%',
-          backgroundColor: '#e5e7eb',
-          marginBottom: '0.5rem',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-        }}
-      />
-      <div
-        style={{
-          height: '1.5rem',
-          width: '60%',
-          backgroundColor: '#e5e7eb',
-          borderRadius: '4px'
-        }}
-      />
-      <div
-        style={{
-          height: '1.25rem',
-          width: '30%',
-          backgroundColor: '#e5e7eb',
-          borderRadius: '12px'
-        }}
-      />
-      <div
-        style={{
-          height: '3rem',
-          width: '100%',
-          backgroundColor: '#e5e7eb',
-          borderRadius: '4px',
-          marginTop: '0.5rem'
-        }}
-      />
-      <div
-        style={{
-          height: '2.5rem',
-          width: '100%',
-          backgroundColor: '#e5e7eb',
-          borderRadius: '4px',
-          marginTop: '0.5rem'
-        }}
-      />
-    </div>
-  );
-}
-
-export default function Home() {
-  // Start with fallback businesses for optimistic UI
-  const [businesses, setBusinesses] = useState<Business[]>(fallbackBusinesses);
+export default function BrowsePage() {
+  const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>('all');
   const [joiningWaitlist, setJoiningWaitlist] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [selectedBusiness, setSelectedBusiness] = useState<number | null>(null);
@@ -161,26 +24,72 @@ export default function Home() {
 
   useEffect(() => {
     fetchBusinesses();
+    // Scroll to top when page loads
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, []);
 
   const fetchBusinesses = async () => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const response = await axios.get(`${apiUrl}/api/businesses`, {
-        timeout: 5000,
-        validateStatus: (status) => status < 500
+        timeout: 5000, // 5 second timeout
+        validateStatus: (status) => status < 500 // Don't throw on 4xx errors
       });
       
-      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+      if (response.data && Array.isArray(response.data)) {
         setBusinesses(response.data);
       } else {
-        // If API returns empty or invalid data, keep fallback businesses
-        setBusinesses(fallbackBusinesses);
+        throw new Error('Invalid response format');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching businesses:', error);
-      // Keep fallback businesses if API fails
-      setBusinesses(fallbackBusinesses);
+      // Fallback to default businesses if API fails
+      setBusinesses([
+        {
+          id: 1,
+          name: 'AgriFlow Tech',
+          category: 'Agri-Tech',
+          description: 'Digitizing farm-to-market logistics in Northern Ghana.',
+          categoryColor: '#10b981'
+        },
+        {
+          id: 2,
+          name: 'PaySwift Africa',
+          category: 'Fintech',
+          description: 'Cross-border payments for SME intra-Africa trade.',
+          categoryColor: '#3b82f6'
+        },
+        {
+          id: 3,
+          name: 'HealthConnect',
+          category: 'Health-Tech',
+          description: 'Telemedicine platform connecting rural clinics to specialists.',
+          categoryColor: '#ef4444'
+        },
+        {
+          id: 4,
+          name: 'Solarify',
+          category: 'Energy',
+          description: 'Pay-as-you-go solar solutions for off-grid communities.',
+          categoryColor: '#fbbf24'
+        },
+        {
+          id: 5,
+          name: 'EduLearn',
+          category: 'Ed-Tech',
+          description: 'AI-driven personalized learning for WASSCE students.',
+          categoryColor: '#a855f7'
+        },
+        {
+          id: 6,
+          name: 'LogiTrak',
+          category: 'Logistics',
+          description: 'Last-mile delivery infrastructure for e-commerce.',
+          categoryColor: '#6b7280'
+        }
+      ]);
     } finally {
       setLoading(false);
     }
@@ -226,6 +135,9 @@ export default function Home() {
 
   const getCategoryColor = (category: string) => {
     const colors: { [key: string]: string } = {
+      'Agri-Tech': '#10b981',
+      'Fintech': '#3b82f6',
+      'Health-Tech': '#ef4444',
       'Energy': '#fbbf24',
       'Ed-Tech': '#a855f7',
       'Logistics': '#6b7280'
@@ -233,32 +145,84 @@ export default function Home() {
     return colors[category] || '#6b7280';
   };
 
+  const filteredBusinesses = filter === 'all' 
+    ? businesses 
+    : businesses.filter(b => b.category === filter);
+
+  const categories = businesses.length > 0 
+    ? ['all', ...Array.from(new Set(businesses.map(b => b.category)))]
+    : ['all'];
+
   return (
-    <main style={{ 
-      padding: '4rem 2rem', 
+    <main style={{
       minHeight: 'calc(100vh - 200px)',
       backgroundColor: 'var(--linkvesta-white)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center'
+      padding: '3rem 2rem'
     }}>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        gap: '2rem',
-        maxWidth: '1200px',
-        width: '100%',
-        marginBottom: '3rem'
-      }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <h1 style={{
+          color: 'var(--linkvesta-dark-blue)',
+          fontSize: '2.5rem',
+          marginBottom: '1rem',
+          fontWeight: 'bold'
+        }}>
+          Browse Businesses
+        </h1>
+        <p style={{
+          color: 'var(--linkvesta-dark-blue)',
+          fontSize: '1.125rem',
+          marginBottom: '2rem',
+          opacity: 0.8
+        }}>
+          Discover high-growth African businesses seeking investment
+        </p>
+
+        {/* Filter */}
+        {!loading && businesses.length > 0 && (
+        <div style={{
+          display: 'flex',
+          gap: '1rem',
+          marginBottom: '2rem',
+          flexWrap: 'wrap'
+        }}>
+          {categories.map((category) => (
+            <button
+              key={category}
+              onClick={() => setFilter(category)}
+              style={{
+                padding: '0.5rem 1.5rem',
+                borderRadius: '20px',
+                border: '2px solid',
+                borderColor: filter === category ? 'var(--linkvesta-gold)' : '#e5e7eb',
+                backgroundColor: filter === category ? 'var(--linkvesta-gold)' : 'transparent',
+                color: filter === category ? 'var(--linkvesta-dark-blue)' : 'var(--linkvesta-dark-blue)',
+                fontWeight: '600',
+                cursor: 'pointer',
+                textTransform: 'capitalize',
+                transition: 'all 0.2s'
+              }}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+        )}
+
         {loading ? (
-          // Show skeleton loaders while loading
-          Array.from({ length: 3 }).map((_, index) => (
-            <BusinessCardSkeleton key={`skeleton-${index}`} />
-          ))
-        ) : businesses.length > 0 ? (
-          // Show actual business cards
-          businesses.map((business) => (
+          <div style={{ color: 'var(--linkvesta-dark-blue)', fontSize: '1.25rem', textAlign: 'center', padding: '3rem' }}>
+            Loading businesses...
+          </div>
+        ) : filteredBusinesses.length === 0 ? (
+          <div style={{ color: 'var(--linkvesta-dark-blue)', fontSize: '1.25rem', textAlign: 'center', padding: '3rem' }}>
+            No businesses found
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+            gap: '2rem'
+          }}>
+            {filteredBusinesses.map((business) => (
               <div
                 key={business.id}
                 style={{
@@ -281,7 +245,20 @@ export default function Home() {
                   e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
                 }}
               >
-                <BusinessLogo business={business} />
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  backgroundColor: '#f3f4f6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '0.5rem',
+                  color: '#9ca3af',
+                  fontSize: '0.875rem'
+                }}>
+                  Logo
+                </div>
                 
                 <h3 style={{
                   color: 'var(--linkvesta-dark-blue)',
@@ -345,48 +322,10 @@ export default function Home() {
                   {joiningWaitlist === business.id ? 'Joining...' : 'Join Waitlist to View'}
                 </button>
               </div>
-            ))
-        ) : (
-          // Fallback if no businesses available
-          <div style={{ 
-            gridColumn: '1 / -1', 
-            textAlign: 'center', 
-            color: 'var(--linkvesta-dark-blue)',
-            padding: '2rem'
-          }}>
-            <p style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>No businesses available at the moment.</p>
-            <p style={{ opacity: 0.8 }}>Please check back later.</p>
+            ))}
           </div>
         )}
       </div>
-
-      {!loading && (
-        <Link
-            href="/faq"
-            style={{
-              backgroundColor: 'transparent',
-              color: 'var(--linkvesta-dark-blue)',
-              padding: '0.75rem 1.5rem',
-              border: '2px solid var(--linkvesta-dark-blue)',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              fontWeight: '600',
-              fontSize: '1rem',
-              transition: 'all 0.2s',
-              display: 'inline-block'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--linkvesta-dark-blue)';
-              e.currentTarget.style.color = 'var(--linkvesta-white)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = 'var(--linkvesta-dark-blue)';
-            }}
-          >
-            View FAQ for Investors
-          </Link>
-      )}
 
       {/* Modal */}
       {showModal && (

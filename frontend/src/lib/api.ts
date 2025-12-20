@@ -31,5 +31,29 @@ export const apiService = {
     });
     return response.data;
   },
+
+  async getBusinesses() {
+    const response = await apiClient.get('/api/businesses');
+    return response.data;
+  },
+
+  async getBusiness(id: number) {
+    const response = await apiClient.get(`/api/businesses/${id}`);
+    return response.data;
+  },
+
+  async joinWaitlist(businessId: number, email: string, name?: string) {
+    const response = await apiClient.post('/api/waitlist', {
+      businessId,
+      email,
+      name,
+    });
+    return response.data;
+  },
+
+  async getWaitlist(businessId: number) {
+    const response = await apiClient.get(`/api/waitlist/${businessId}`);
+    return response.data;
+  },
 };
 

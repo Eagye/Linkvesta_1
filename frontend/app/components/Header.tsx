@@ -2,9 +2,38 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  const handleBrowseClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // If already on browse page, scroll to top instead of navigating
+    if (pathname === '/browse') {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    // Otherwise, let Link handle navigation normally (no preventDefault)
+  };
+
+  const handlePricingClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // If already on pricing page, scroll to top instead of navigating
+    if (pathname === '/pricing') {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    // Otherwise, let Link handle navigation normally (no preventDefault)
+  };
+
+  const handleHowItWorksClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // If already on how-it-works page, scroll to top instead of navigating
+    if (pathname === '/how-it-works') {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    // Otherwise, let Link handle navigation normally (no preventDefault)
+  };
 
   return (
     <header style={{
@@ -41,13 +70,46 @@ export default function Header() {
         <Link href="/about" style={{ color: 'var(--linkvesta-white)', textDecoration: 'none' }}>
           About Us
         </Link>
-        <Link href="/how-it-works" style={{ color: 'var(--linkvesta-white)', textDecoration: 'none' }}>
+        <Link 
+          href="/how-it-works" 
+          onClick={handleHowItWorksClick}
+          style={{ 
+            color: 'var(--linkvesta-white)', 
+            textDecoration: 'none',
+            transition: 'opacity 0.2s',
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+        >
           How It Works
         </Link>
-        <Link href="/pricing" style={{ color: 'var(--linkvesta-white)', textDecoration: 'none' }}>
+        <Link 
+          href="/pricing" 
+          onClick={handlePricingClick}
+          style={{ 
+            color: 'var(--linkvesta-white)', 
+            textDecoration: 'none',
+            transition: 'opacity 0.2s',
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+        >
           Pricing
         </Link>
-        <Link href="/browse" style={{ color: 'var(--linkvesta-white)', textDecoration: 'none' }}>
+        <Link 
+          href="/browse" 
+          onClick={handleBrowseClick}
+          style={{ 
+            color: 'var(--linkvesta-white)', 
+            textDecoration: 'none',
+            transition: 'opacity 0.2s',
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+        >
           Browse Businesses
         </Link>
         
