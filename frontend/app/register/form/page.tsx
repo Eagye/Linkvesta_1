@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authService } from '@/src/lib/auth';
+import TermsDialog from '@/app/components/TermsDialog';
+import zxcvbn from 'zxcvbn';
 
 function RegisterFormContent() {
   const router = useRouter();
@@ -26,6 +28,8 @@ function RegisterFormContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [generalError, setGeneralError] = useState('');
+  const [showTermsDialog, setShowTermsDialog] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState<{ score: number; feedback: string[] } | null>(null);
 
   // Redirect if no account type selected
   useEffect(() => {
@@ -42,6 +46,21 @@ function RegisterFormContent() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+
+    // Calculate password strength when password changes
+    if (name === 'password' && value) {
+      const result = zxcvbn(value, [formData.email, formData.fullName].filter(Boolean));
+      setPasswordStrength({
+        score: result.score,
+        feedback: result.feedback.suggestions.length > 0 
+          ? result.feedback.suggestions 
+          : result.score < 3 
+            ? ['Password is too weak. Try adding more characters, numbers, or special characters.'] 
+            : []
+      });
+    } else if (name === 'password' && !value) {
+      setPasswordStrength(null);
+    }
 
     // Clear error for this field when user starts typing
     if (errors[name]) {
@@ -106,8 +125,14 @@ function RegisterFormContent() {
 
     if (!formData.password) {
       newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must contain at least 8 characters';
+    } else {
+      // Use zxcvbn for password strength validation
+      const result = zxcvbn(formData.password, [formData.email, formData.fullName].filter(Boolean));
+      if (result.score < 2) {
+        newErrors.password = 'Password is too weak. Please choose a stronger password.';
+      } else if (formData.password.length < 8) {
+        newErrors.password = 'Password must contain at least 8 characters';
+      }
     }
 
     if (!formData.confirmPassword) {
@@ -136,9 +161,11 @@ function RegisterFormContent() {
       newErrors.businessRegistrationDocument = 'Please upload your business registration document';
     }
 
-    if (!formData.termsAgreed) {
-      newErrors.termsAgreed = 'Please accept the Terms of Service and Privacy Policy to continue';
-    }
+    // Terms agreement is now handled by the dialog, so we don't need to check the checkbox
+    // But we'll keep the checkbox for user awareness
+    // if (!formData.termsAgreed) {
+    //   newErrors.termsAgreed = 'Please accept the Terms of Service and Privacy Policy to continue';
+    // }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -151,6 +178,12 @@ function RegisterFormContent() {
       return;
     }
 
+    // Show terms dialog instead of submitting immediately
+    setShowTermsDialog(true);
+  };
+
+  const handleTermsAgree = async () => {
+    setShowTermsDialog(false);
     setIsSubmitting(true);
 
     try {
@@ -502,7 +535,19 @@ function RegisterFormContent() {
               style={{
                 width: '100%',
                 padding: '0.875rem 1rem',
-                border: `2px solid ${errors.password ? '#ef4444' : '#e5e7eb'}`,
+                border: `2px solid ${
+                  errors.password 
+                    ? '#ef4444' 
+                    : passwordStrength && formData.password
+                      ? passwordStrength.score < 2 
+                        ? '#ef4444' 
+                        : passwordStrength.score < 3 
+                          ? '#f97316' 
+                          : passwordStrength.score < 4 
+                            ? '#eab308' 
+                            : '#22c55e'
+                      : '#e5e7eb'
+                }`,
                 borderRadius: '8px',
                 fontSize: '1rem',
                 color: 'var(--linkvesta-dark-blue)',
@@ -511,7 +556,7 @@ function RegisterFormContent() {
                 outline: 'none',
                 backgroundColor: '#ffffff'
               }}
-              placeholder="Minimum 8 characters"
+              placeholder="Enter a strong password"
               onFocus={(e) => {
                 if (!errors.password) {
                   e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
@@ -523,6 +568,76 @@ function RegisterFormContent() {
                 e.currentTarget.style.boxShadow = 'none';
               }}
             />
+            
+            {/* Password Strength Indicator */}
+            {passwordStrength && formData.password && (
+              <div style={{ marginTop: '0.75rem' }}>
+                <div style={{
+                  display: 'flex',
+                  gap: '0.25rem',
+                  marginBottom: '0.5rem'
+                }}>
+                  {[0, 1, 2, 3, 4].map((level) => {
+                    const colors = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e'];
+                    const labels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+                    const isActive = level <= passwordStrength.score;
+                    return (
+                      <div
+                        key={level}
+                        style={{
+                          flex: 1,
+                          height: '4px',
+                          backgroundColor: isActive ? colors[passwordStrength.score] : '#e5e7eb',
+                          borderRadius: '2px',
+                          transition: 'background-color 0.3s'
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontSize: '0.875rem'
+                }}>
+                  <span style={{
+                    color: passwordStrength.score < 2 ? '#ef4444' : passwordStrength.score < 3 ? '#f97316' : passwordStrength.score < 4 ? '#eab308' : '#22c55e',
+                    fontWeight: '600'
+                  }}>
+                    {passwordStrength.score === 0 && 'Very Weak'}
+                    {passwordStrength.score === 1 && 'Weak'}
+                    {passwordStrength.score === 2 && 'Fair'}
+                    {passwordStrength.score === 3 && 'Good'}
+                    {passwordStrength.score === 4 && 'Strong'}
+                  </span>
+                  {passwordStrength.score < 2 && (
+                    <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>
+                      (Minimum required: Fair)
+                    </span>
+                  )}
+                </div>
+                {passwordStrength.feedback.length > 0 && (
+                  <div style={{
+                    marginTop: '0.5rem',
+                    padding: '0.75rem',
+                    backgroundColor: passwordStrength.score < 2 ? '#fef2f2' : '#f0f9ff',
+                    border: `1px solid ${passwordStrength.score < 2 ? '#fecaca' : '#bae6fd'}`,
+                    borderRadius: '6px'
+                  }}>
+                    <p style={{
+                      fontSize: '0.8125rem',
+                      color: passwordStrength.score < 2 ? '#991b1b' : '#1e40af',
+                      margin: 0,
+                      lineHeight: '1.5'
+                    }}>
+                      <strong>Suggestion:</strong> {passwordStrength.feedback[0]}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {errors.password && (
               <p style={{ 
                 color: '#dc2626', 
@@ -841,64 +956,26 @@ function RegisterFormContent() {
             </div>
           )}
 
-          {/* Terms Agreement */}
-          <div style={{ marginBottom: '2rem' }}>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '0.75rem',
-                cursor: 'pointer'
-              }}
-            >
-              <input
-                type="checkbox"
-                id="termsAgreed"
-                name="termsAgreed"
-                checked={formData.termsAgreed}
-                onChange={handleChange}
-                required
-                style={{
-                  marginTop: '0.25rem',
-                  width: '18px',
-                  height: '18px',
-                  cursor: 'pointer'
-                }}
-              />
-              <span style={{
-                fontSize: '0.875rem',
-                color: 'var(--linkvesta-dark-blue)',
-                lineHeight: '1.5'
-              }}>
-                I agree to the{' '}
-                <Link href="/terms" style={{ color: 'var(--linkvesta-dark-blue)', textDecoration: 'underline' }}>
-                  Terms of Service
-                </Link>
-                {' '}and{' '}
-                <Link href="/privacy" style={{ color: 'var(--linkvesta-dark-blue)', textDecoration: 'underline' }}>
-                  Privacy Policy
-                </Link>
-                <span style={{ color: '#ef4444' }}> *</span>
-              </span>
-            </label>
-            {errors.termsAgreed && (
-              <p style={{ 
-                color: '#dc2626', 
-                fontSize: '0.875rem', 
-                marginTop: '0.5rem',
-                marginLeft: '1.75rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="8" x2="12" y2="12"></line>
-                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-                {errors.termsAgreed}
-              </p>
-            )}
+          {/* Terms Agreement Info */}
+          <div style={{ 
+            marginBottom: '2rem',
+            padding: '1rem',
+            backgroundColor: '#f0f9ff',
+            border: '1px solid #bae6fd',
+            borderRadius: '8px'
+          }}>
+            <p style={{
+              fontSize: '0.875rem',
+              color: 'var(--linkvesta-dark-blue)',
+              lineHeight: '1.6',
+              margin: 0
+            }}>
+              <strong>Note:</strong> By clicking "Create Account", you will be required to read and agree to our{' '}
+              <Link href="/terms" target="_blank" style={{ color: 'var(--linkvesta-gold)', textDecoration: 'underline', fontWeight: '600' }}>
+                Terms and Conditions
+              </Link>
+              {' '}before your account is created.
+            </p>
           </div>
 
           {/* Submit Button */}
@@ -957,6 +1034,13 @@ function RegisterFormContent() {
             </Link>
           </div>
         </form>
+
+        {/* Terms and Conditions Dialog */}
+        <TermsDialog
+          isOpen={showTermsDialog}
+          onClose={() => setShowTermsDialog(false)}
+          onAgree={handleTermsAgree}
+        />
       </div>
     </main>
   );
