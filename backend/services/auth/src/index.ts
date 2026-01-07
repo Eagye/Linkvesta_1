@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -12,8 +12,8 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3002;
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_SECRET: string = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
+const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d';
 
 // Create uploads directory if it doesn't exist
 // Use process.cwd() to get project root, then navigate to uploads folder
@@ -81,6 +81,7 @@ app.get('/api/auth', (req: Request, res: Response) => {
 
 // Helper function to generate JWT token
 function generateToken(userId: number, email: string, role: string): string {
+  // @ts-ignore - TypeScript strict mode issue with jsonwebtoken types
   return jwt.sign(
     { userId, email, role },
     JWT_SECRET,
@@ -249,9 +250,9 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Login error:', error);
+    // Return generic error to prevent information disclosure
     res.status(500).json({ 
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Invalid email or password'
     });
   }
 });
@@ -283,7 +284,7 @@ app.post('/api/auth/admin/login', async (req: Request, res: Response) => {
 
     if (result.rows.length === 0) {
       return res.status(401).json({ 
-        error: 'Invalid email or password, or user is not an admin' 
+        error: 'Invalid email or password' 
       });
     }
 
@@ -313,9 +314,9 @@ app.post('/api/auth/admin/login', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Admin login error:', error);
+    // Return generic error to prevent information disclosure
     res.status(500).json({ 
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Invalid email or password'
     });
   }
 });
@@ -400,7 +401,10 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(401).json({ 
+        valid: false,
+        error: 'Invalid or expired token' 
+      });
     }
 
     res.json({

@@ -39,7 +39,7 @@ export default function Home() {
             marginBottom: '2rem'
           }}>
             <span>🇬🇭</span>
-            <span>BUILT FOR GHANA'S FUTURE</span>
+            <span>BUILT FOR GHANA&apos;S FUTURE</span>
           </div>
 
           {/* Main Headline */}

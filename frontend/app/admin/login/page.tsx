@@ -29,7 +29,8 @@ export default function AdminLoginPage() {
       // Redirect to admin dashboard (to be created later)
       router.push('/admin/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials. Please verify your email and password and try again.');
+      // Always use generic error message to prevent information disclosure
+      setError('Invalid email or password. Please check your credentials and try again.');
       setLoading(false);
     }
   };

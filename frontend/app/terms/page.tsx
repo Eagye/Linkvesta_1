@@ -44,7 +44,7 @@ export default function TermsPage() {
               lineHeight: '1.8',
               opacity: 0.9
             }}>
-              Welcome to Linkvesta ("Platform", "we", "our", or "us"). Linkvesta is a digital platform designed to connect vetted startups and small-to-medium enterprises (SMEs) with potential investors. By accessing or using the Linkvesta website, services, or any related applications (collectively, the "Services"), you agree to be bound by these Terms and Conditions ("Terms"). If you do not agree to these Terms, you must not use the Platform. These Terms are governed by the laws of the Republic of Ghana.
+              Welcome to Linkvesta (&quot;Platform&quot;, &quot;we&quot;, &quot;our&quot;, or &quot;us&quot;). Linkvesta is a digital platform designed to connect vetted startups and small-to-medium enterprises (SMEs) with potential investors. By accessing or using the Linkvesta website, services, or any related applications (collectively, the &quot;Services&quot;), you agree to be bound by these Terms and Conditions (&quot;Terms&quot;). If you do not agree to these Terms, you must not use the Platform. These Terms are governed by the laws of the Republic of Ghana.
             </p>
           </section>
 

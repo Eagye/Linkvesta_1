@@ -970,7 +970,7 @@ function RegisterFormContent() {
               lineHeight: '1.6',
               margin: 0
             }}>
-              <strong>Note:</strong> By clicking "Create Account", you will be required to read and agree to our{' '}
+              <strong>Note:</strong> By clicking &quot;Create Account&quot;, you will be required to read and agree to our{' '}
               <Link href="/terms" target="_blank" style={{ color: 'var(--linkvesta-gold)', textDecoration: 'underline', fontWeight: '600' }}>
                 Terms and Conditions
               </Link>

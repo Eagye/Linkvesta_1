@@ -36,8 +36,8 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      const errorMessage = error.response?.data?.error || 'The email or password you entered is incorrect. Please check your credentials and try again.';
-      setError(errorMessage);
+      // Always use generic error message to prevent information disclosure
+      setError('Invalid email or password. Please check your credentials and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -213,7 +213,7 @@ export default function LoginPage() {
             color: '#6b7280',
             margin: 0
           }}>
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <Link
               href="/register"
               style={{
