@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authService } from '@/src/lib/auth';
 import TermsDialog from '@/app/components/TermsDialog';
+import Toast from '@/app/components/Toast';
 import zxcvbn from 'zxcvbn';
 
 function RegisterFormContent() {
@@ -26,10 +27,13 @@ function RegisterFormContent() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [generalError, setGeneralError] = useState('');
   const [showTermsDialog, setShowTermsDialog] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState<{ score: number; feedback: string[] } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; isVisible: boolean }>({
+    message: '',
+    type: 'info',
+    isVisible: false
+  });
 
   // Redirect if no account type selected
   useEffect(() => {
@@ -80,8 +84,16 @@ function RegisterFormContent() {
       if (file.type !== 'application/pdf') {
         setErrors(prev => ({
           ...prev,
-          businessRegistrationDocument: 'Please upload a PDF file. Other file formats are not accepted.'
+          businessRegistrationDocument: 'PDF format required'
         }));
+        showToast('Please upload a PDF file. Other file formats are not accepted.', 'error');
+        // Clear the invalid file
+        setFormData(prev => ({
+          ...prev,
+          businessRegistrationDocument: null
+        }));
+        // Reset the file input
+        e.target.value = '';
         return;
       }
       
@@ -89,8 +101,16 @@ function RegisterFormContent() {
       if (file.size > 5 * 1024 * 1024) {
         setErrors(prev => ({
           ...prev,
-          businessRegistrationDocument: 'File size exceeds the 5MB limit. Please upload a smaller file.'
+          businessRegistrationDocument: 'File too large'
         }));
+        showToast('The file you selected is too large. Please upload a file smaller than 5MB.', 'error');
+        // Clear the invalid file
+        setFormData(prev => ({
+          ...prev,
+          businessRegistrationDocument: null
+        }));
+        // Reset the file input
+        e.target.value = '';
         return;
       }
 
@@ -107,67 +127,103 @@ function RegisterFormContent() {
           return newErrors;
         });
       }
+    } else {
+      // If no file selected, clear it
+      setFormData(prev => ({
+        ...prev,
+        businessRegistrationDocument: null
+      }));
     }
+  };
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type, isVisible: true });
+  };
+
+  const hideToast = () => {
+    setToast(prev => ({ ...prev, isVisible: false }));
   };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
+    let firstError = '';
 
     if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Please provide your full name';
+      newErrors.fullName = 'Full name is required';
+      if (!firstError) firstError = 'Please provide your full name to continue.';
     }
 
     if (!formData.email.trim()) {
       newErrors.email = 'Email address is required';
+      if (!firstError) firstError = 'Please provide your email address to continue.';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
+      if (!firstError) firstError = 'Please enter a valid email address (e.g., name@example.com).';
     }
 
     if (!formData.password) {
       newErrors.password = 'Password is required';
+      if (!firstError) firstError = 'Please create a password for your account.';
     } else {
       // Use zxcvbn for password strength validation
       const result = zxcvbn(formData.password, [formData.email, formData.fullName].filter(Boolean));
       if (result.score < 2) {
-        newErrors.password = 'Password is too weak. Please choose a stronger password.';
+        newErrors.password = 'Password is too weak';
+        if (!firstError) firstError = 'Your password needs to be stronger. Try adding numbers, special characters, or more letters.';
       } else if (formData.password.length < 8) {
-        newErrors.password = 'Password must contain at least 8 characters';
+        newErrors.password = 'Password must be at least 8 characters';
+        if (!firstError) firstError = 'Your password must be at least 8 characters long.';
       }
     }
 
     if (!formData.confirmPassword) {
       newErrors.confirmPassword = 'Please confirm your password';
+      if (!firstError) firstError = 'Please confirm your password to continue.';
     } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match. Please try again';
+      newErrors.confirmPassword = 'Passwords do not match';
+      if (!firstError) firstError = 'The passwords you entered do not match. Please try again.';
     }
 
     // Country is required only for Investor/Startup
     if ((accountType === 'investor' || accountType === 'startup') && !formData.country) {
       newErrors.country = 'Please select your country';
+      if (!firstError) firstError = 'Please select your country from the dropdown menu.';
     }
     
     // Phone number is required for all account types
     if (!formData.phoneNumber?.trim()) {
       newErrors.phoneNumber = 'Phone number is required';
+      if (!firstError) firstError = 'Please provide your phone number to continue.';
     }
 
-    // TIN is required only for Startup/SME
-    if (accountType === 'startup' && !formData.tin?.trim()) {
-      newErrors.tin = 'Tax Identification Number (TIN) is required for business registration';
+    // TIN is REQUIRED for Startup/SME
+    if (accountType === 'startup') {
+      if (!formData.tin?.trim()) {
+        newErrors.tin = 'TIN is required';
+        if (!firstError) firstError = 'Please provide your Tax Identification Number (TIN) to complete your business registration.';
+      }
+      
+      // Business registration document is REQUIRED for Startup/SME
+      if (!formData.businessRegistrationDocument) {
+        newErrors.businessRegistrationDocument = 'Business registration document is required';
+        if (!firstError) firstError = 'Please upload your business registration document (PDF) to complete your registration.';
+      }
     }
-
-    // Business registration document is required only for Startup/SME
-    if (accountType === 'startup' && !formData.businessRegistrationDocument) {
-      newErrors.businessRegistrationDocument = 'Please upload your business registration document';
-    }
-
-    // Terms agreement is now handled by the dialog, so we don't need to check the checkbox
-    // But we'll keep the checkbox for user awareness
-    // if (!formData.termsAgreed) {
-    //   newErrors.termsAgreed = 'Please accept the Terms of Service and Privacy Policy to continue';
-    // }
 
     setErrors(newErrors);
+    
+    // Show toast with first error if validation fails
+    if (Object.keys(newErrors).length > 0 && firstError) {
+      showToast(firstError, 'error');
+      // Scroll to first error field
+      const firstErrorField = Object.keys(newErrors)[0];
+      const element = document.getElementById(firstErrorField);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.focus();
+      }
+    }
+    
     return Object.keys(newErrors).length === 0;
   };
 
@@ -207,13 +263,40 @@ function RegisterFormContent() {
         localStorage.setItem('user', JSON.stringify(response.user));
       }
 
-      // Redirect to login page after successful registration
-      alert('Account created successfully! Please sign in.');
-      router.push('/login');
+      // Show success message and redirect
+      showToast('Welcome to Linkvesta! Your account has been created successfully. You are now logged in.', 'success');
+      setTimeout(() => {
+        router.push('/');
+      }, 2000);
     } catch (error: any) {
       console.error('Registration error:', error);
-      const errorMessage = error.response?.data?.error || 'Failed to create account. Please try again.';
-      alert(errorMessage);
+      
+      // Map backend errors to friendly messages
+      let friendlyMessage = 'We encountered an issue while creating your account. Please try again in a moment.';
+      
+      if (error.response?.data?.error) {
+        const backendError = error.response.data.error;
+        
+        if (backendError.includes('already exists')) {
+          friendlyMessage = 'An account with this email address already exists. Please use a different email or try logging in.';
+        } else if (backendError.includes('TIN') || backendError.includes('Tax Identification')) {
+          friendlyMessage = 'Please provide your Tax Identification Number (TIN) to complete your business registration.';
+        } else if (backendError.includes('Business registration document') || backendError.includes('PDF')) {
+          friendlyMessage = 'Please upload your business registration document (PDF format) to complete your registration.';
+        } else if (backendError.includes('password') && backendError.includes('8')) {
+          friendlyMessage = 'Your password must be at least 8 characters long. Please choose a stronger password.';
+        } else if (backendError.includes('required')) {
+          friendlyMessage = 'Please fill in all required fields to complete your registration.';
+        } else {
+          friendlyMessage = backendError;
+        }
+      } else if (error.message) {
+        if (error.message.includes('Network') || error.message.includes('fetch')) {
+          friendlyMessage = 'Unable to connect to our servers. Please check your internet connection and try again.';
+        }
+      }
+      
+      showToast(friendlyMessage, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -269,52 +352,14 @@ function RegisterFormContent() {
           </span>
         </div>
 
-        {/* Success Message */}
-        {successMessage && (
-          <div style={{
-            padding: '1rem 1.25rem',
-            backgroundColor: '#f0fdf4',
-            border: '1px solid #86efac',
-            borderRadius: '8px',
-            color: '#166534',
-            marginBottom: '1.5rem',
-            fontSize: '0.875rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-            {successMessage}
-          </div>
-        )}
-
-        {/* General Error Message */}
-        {generalError && (
-          <div style={{
-            padding: '1rem 1.25rem',
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fecaca',
-            borderRadius: '8px',
-            color: '#dc2626',
-            marginBottom: '1.5rem',
-            fontSize: '0.875rem',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '0.75rem',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: '2px' }}>
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <span>{generalError}</span>
-          </div>
-        )}
+        {/* Toast Notification */}
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          isVisible={toast.isVisible}
+          onClose={hideToast}
+          duration={toast.type === 'success' ? 3000 : 6000}
+        />
 
         {/* Registration Form */}
         <form onSubmit={handleSubmit}>
@@ -794,6 +839,15 @@ function RegisterFormContent() {
                 }}
               >
                 TIN (Tax Identification Number) <span style={{ color: '#ef4444' }}>*</span>
+                <span style={{ 
+                  fontSize: '0.75rem', 
+                  fontWeight: '400', 
+                  color: '#6b7280',
+                  marginLeft: '0.5rem',
+                  fontStyle: 'italic'
+                }}>
+                  (Required)
+                </span>
               </label>
               <input
                 type="text"
@@ -846,7 +900,7 @@ function RegisterFormContent() {
             </div>
           )}
 
-          {/* Business Registration Document - Required only for Startup/SME */}
+          {/* Business Registration Document - Required for Startup/SME */}
           {accountType === 'startup' && (
             <div style={{ marginBottom: '1.5rem' }}>
               <label
@@ -860,6 +914,15 @@ function RegisterFormContent() {
                 }}
               >
                 Business Registration Document (PDF) <span style={{ color: '#ef4444' }}>*</span>
+                <span style={{ 
+                  fontSize: '0.75rem', 
+                  fontWeight: '400', 
+                  color: '#6b7280',
+                  marginLeft: '0.5rem',
+                  fontStyle: 'italic'
+                }}>
+                  (Required)
+                </span>
               </label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -946,12 +1009,25 @@ function RegisterFormContent() {
                 </div>
               )}
               {errors.businessRegistrationDocument && (
-                <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                <p style={{ 
+                  color: '#ef4444', 
+                  fontSize: '0.875rem', 
+                  marginTop: '0.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontWeight: '500'
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
                   {errors.businessRegistrationDocument}
                 </p>
               )}
               <p style={{ color: '#6b7280', fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                Maximum file size: 5MB. PDF format only.
+                <strong>Required:</strong> Maximum file size: 5MB. PDF format only.
               </p>
             </div>
           )}

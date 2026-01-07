@@ -2,6 +2,8 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
+import fs from 'fs';
+import path from 'path';
 import { pool } from './config/database';
 import { storageService } from './services/storage';
 
@@ -142,7 +144,7 @@ function authenticateAdmin(req: Request, res: Response, next: Function) {
 app.get('/api/admin/businesses', authenticateAdmin, async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, category, description, category_color as "categoryColor", logo_url as "logoUrl", approved, created_at FROM businesses ORDER BY created_at DESC'
+      'SELECT id, name, category, description, category_color as "categoryColor", logo_url as "logoUrl", approved, created_at as "createdAt" FROM businesses ORDER BY created_at DESC'
     );
     res.json(result.rows);
   } catch (error) {
@@ -163,9 +165,9 @@ app.post('/api/admin/businesses/:id/approve', authenticateAdmin, async (req: Req
       [id]
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Business not found' });
+      return res.status(404).json({ error: 'We couldn\'t find the business you\'re trying to approve. It may have already been removed.' });
     }
-    res.json({ message: 'Business approved successfully', business: result.rows[0] });
+    res.json({ message: `Great! "${result.rows[0].name}" has been approved and is now visible to investors on the platform.`, business: result.rows[0] });
   } catch (error) {
     console.error('Database error:', error);
     res.status(500).json({ 
@@ -175,24 +177,83 @@ app.post('/api/admin/businesses/:id/approve', authenticateAdmin, async (req: Req
   }
 });
 
-// Admin endpoint - Reject/Unapprove business
+// Admin endpoint - Reject and delete business and associated user
 app.post('/api/admin/businesses/:id/reject', authenticateAdmin, async (req: Request, res: Response) => {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const { id } = req.params;
-    const result = await pool.query(
-      'UPDATE businesses SET approved = false WHERE id = $1 RETURNING id, name, approved',
+    
+    // Get business details first
+    const businessResult = await client.query(
+      'SELECT id, name, description FROM businesses WHERE id = $1',
       [id]
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Business not found' });
+    
+    if (businessResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'We couldn\'t find the business you\'re trying to reject. It may have already been removed.' });
     }
-    res.json({ message: 'Business rejected successfully', business: result.rows[0] });
+    
+    const business = businessResult.rows[0];
+    
+    // Extract email from business description to find associated user
+    let userEmail = null;
+    if (business.description) {
+      const emailMatch = business.description.match(/submitted by\s+([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
+      if (emailMatch && emailMatch[1]) {
+        userEmail = emailMatch[1].toLowerCase().trim();
+      }
+    }
+    
+    // Find and delete the associated user if email found
+    if (userEmail) {
+      // Get user's business registration document path before deleting
+      const userResult = await client.query(
+        'SELECT id, business_registration_document FROM users WHERE email = $1 AND account_type = $2',
+        [userEmail, 'startup']
+      );
+      
+      if (userResult.rows.length > 0) {
+        const user = userResult.rows[0];
+        
+        // Delete the uploaded file if it exists
+        if (user.business_registration_document) {
+          try {
+            const filePath = path.join(process.cwd(), 'backend', 'services', 'auth', user.business_registration_document);
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+              console.log(`Deleted file: ${filePath}`);
+            }
+          } catch (fileError) {
+            console.error('Error deleting file:', fileError);
+            // Continue with user deletion even if file deletion fails
+          }
+        }
+        
+        // Delete the user
+        await client.query('DELETE FROM users WHERE id = $1', [user.id]);
+        console.log(`Deleted user: ${userEmail}`);
+      }
+    }
+    
+    // Delete the business
+    await client.query('DELETE FROM businesses WHERE id = $1', [id]);
+    
+    await client.query('COMMIT');
+    res.json({ 
+      message: `The business registration for "${business.name}" has been rejected and removed from the system. The associated user account and documents have also been deleted.`,
+      deletedBusinessId: id
+    });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Database error:', error);
     res.status(500).json({ 
-      error: 'Internal server error',
+      error: 'We encountered an issue while processing the rejection. Please try again in a moment.',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
+  } finally {
+    client.release();
   }
 });
 

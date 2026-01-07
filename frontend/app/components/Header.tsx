@@ -207,35 +207,20 @@ export default function Header() {
             </button>
           </div>
         ) : (
-          // User is not logged in - show login/signup links
-          <>
-            <Link 
-              href="/login" 
-              style={{ 
-                color: 'var(--linkvesta-white)', 
-                textDecoration: 'none',
-                transition: 'opacity 0.2s',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-            >
-              Login
-            </Link>
-            <Link 
-              href="/register" 
-              style={{ 
-                color: 'var(--linkvesta-white)', 
-                textDecoration: 'none',
-                transition: 'opacity 0.2s',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-            >
-              Sign Up
-            </Link>
-          </>
+          // User is not logged in - show signup link
+          <Link 
+            href="/register" 
+            style={{ 
+              color: 'var(--linkvesta-white)', 
+              textDecoration: 'none',
+              transition: 'opacity 0.2s',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+          >
+            Sign Up
+          </Link>
         )}
         
         <Link 

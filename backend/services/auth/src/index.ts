@@ -123,13 +123,13 @@ app.post('/api/auth/register', upload.single('businessRegistrationDocument'), as
     // Validation
     if (!email || !password) {
       return res.status(400).json({ 
-        error: 'Email and password are required' 
+        error: 'Please provide both your email address and password to create your account.' 
       });
     }
 
     if (password.length < 8) {
       return res.status(400).json({ 
-        error: 'Password must be at least 8 characters long' 
+        error: 'For your security, please choose a password that is at least 8 characters long.' 
       });
     }
 
@@ -141,30 +141,75 @@ app.post('/api/auth/register', upload.single('businessRegistrationDocument'), as
 
     if (existingUser.rows.length > 0) {
       return res.status(409).json({ 
-        error: 'User with this email already exists' 
+        error: 'An account with this email address already exists. Please use a different email or try logging in instead.' 
       });
+    }
+
+    // For startup/SME accounts, TIN and business registration document are required
+    if (accountType === 'startup') {
+      if (!tin || !tin.trim()) {
+        return res.status(400).json({ 
+          error: 'To complete your business registration, please provide your Tax Identification Number (TIN).' 
+        });
+      }
+
+      if (!businessRegistrationDocument) {
+        return res.status(400).json({ 
+          error: 'To complete your business registration, please upload your business registration document in PDF format.' 
+        });
+      }
     }
 
     // Hash password
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
+    // Handle business registration document file path
+    let businessDocPath = null;
+    if (businessRegistrationDocument) {
+      businessDocPath = `/uploads/${businessRegistrationDocument.filename}`;
+    }
+
     // Insert user with all registration fields
     const result = await pool.query(
-      `INSERT INTO users (email, password_hash, name, phone_number, country, account_type, role) 
-       VALUES ($1, $2, $3, $4, $5, $6, 'user') 
-       RETURNING id, email, name, phone_number, country, account_type, role, created_at`,
+      `INSERT INTO users (email, password_hash, name, phone_number, country, account_type, role, tin, business_registration_document) 
+       VALUES ($1, $2, $3, $4, $5, $6, 'user', $7, $8) 
+       RETURNING id, email, name, phone_number, country, account_type, role, tin, business_registration_document, created_at`,
       [
         email.toLowerCase().trim(), 
         passwordHash, 
         name || null,
         phoneNumber || null,
         country || null,
-        accountType || null
+        accountType || null,
+        tin || null,
+        businessDocPath
       ]
     );
 
     const user = result.rows[0];
+
+    // If user is registering as a startup/SME, create a business entry for admin approval
+    if (accountType === 'startup' && name) {
+      try {
+        const businessDescription = `Business registration submitted by ${email}.${country ? ` Located in ${country}.` : ''}${tin ? ` TIN: ${tin}.` : ''}${businessDocPath ? ' Business registration document uploaded.' : ''}`;
+        
+        await pool.query(
+          `INSERT INTO businesses (name, category, description, category_color, approved, created_at) 
+           VALUES ($1, $2, $3, $4, false, CURRENT_TIMESTAMP)`,
+          [
+            name, // Business name (using user's name/company name)
+            'Other', // Default category - admin can update later
+            businessDescription,
+            '#6b7280' // Default gray color
+          ]
+        );
+        console.log(`Business entry created for startup user: ${email}`);
+      } catch (businessError) {
+        console.error('Error creating business entry:', businessError);
+        // Don't fail registration if business creation fails - log it
+      }
+    }
 
     // Generate token
     const token = generateToken(user.id, user.email, user.role);

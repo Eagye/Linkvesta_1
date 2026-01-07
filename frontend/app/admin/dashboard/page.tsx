@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiService } from '@/src/lib/api';
 import { authService } from '@/src/lib/auth';
+import Toast from '@/app/components/Toast';
 
 interface Business {
   id: number;
@@ -49,6 +50,14 @@ export default function AdminDashboardPage() {
   });
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserDetails, setShowUserDetails] = useState(false);
+  const [showPdfViewer, setShowPdfViewer] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; isVisible: boolean }>({
+    message: '',
+    type: 'info',
+    isVisible: false
+  });
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [businessToReject, setBusinessToReject] = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     // Check if user is authenticated
@@ -74,10 +83,15 @@ export default function AdminDashboardPage() {
       
       // Load businesses and users separately to handle errors gracefully
       try {
+        console.log('Fetching businesses with token:', token ? 'Token present' : 'No token');
         const businessesData = await apiService.getAllBusinesses(token);
-        setBusinesses(businessesData);
+        console.log('Businesses data received:', businessesData);
+        setBusinesses(businessesData || []);
       } catch (err: any) {
         console.error('Error loading businesses:', err);
+        console.error('Error response:', err.response?.data);
+        console.error('Error status:', err.response?.status);
+        setError(`Failed to load businesses: ${err.response?.data?.error || err.message || 'Unknown error'}`);
         setBusinesses([]);
       }
 
@@ -107,6 +121,14 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type, isVisible: true });
+  };
+
+  const hideToast = () => {
+    setToast(prev => ({ ...prev, isVisible: false }));
+  };
+
   const handleApproveBusiness = async (businessId: number) => {
     try {
       const token = localStorage.getItem('admin_token');
@@ -114,28 +136,75 @@ export default function AdminDashboardPage() {
         router.push('/admin/login');
         return;
       }
-      await apiService.approveBusiness(businessId, token);
+      const response = await apiService.approveBusiness(businessId, token);
+      // Show success message
+      const message = response.message || `Business has been approved successfully and is now visible to investors.`;
+      showToast(message, 'success');
       // Reload businesses
       await loadDashboard();
+      setError(''); // Clear any previous errors
     } catch (err: any) {
-      setError('Failed to approve business. Please try again.');
       console.error('Approve error:', err);
+      let friendlyMessage = 'We encountered an issue while approving this business. Please try again in a moment.';
+      
+      if (err.response?.data?.error) {
+        const backendError = err.response.data.error;
+        if (backendError.includes('not found') || backendError.includes('couldn\'t find')) {
+          friendlyMessage = backendError;
+        } else if (backendError.includes('Internal server error') || backendError.includes('encountered an issue')) {
+          friendlyMessage = backendError;
+        }
+      }
+      
+      showToast(friendlyMessage, 'error');
+      setError('');
     }
   };
 
-  const handleRejectBusiness = async (businessId: number) => {
+  const handleRejectBusiness = (businessId: number) => {
+    // Find the business to show in confirmation
+    const business = businesses.find(b => b.id === businessId);
+    if (business) {
+      setBusinessToReject({ id: businessId, name: business.name });
+      setShowRejectConfirm(true);
+    }
+  };
+
+  const confirmRejectBusiness = async () => {
+    if (!businessToReject) return;
+    
+    setShowRejectConfirm(false);
+    
     try {
       const token = localStorage.getItem('admin_token');
       if (!token) {
         router.push('/admin/login');
         return;
       }
-      await apiService.rejectBusiness(businessId, token);
-      // Reload businesses
+      const response = await apiService.rejectBusiness(businessToReject.id, token);
+      // Show success message
+      const message = response.message || `The business registration has been rejected and removed from the system.`;
+      showToast(message, 'success');
+      // Reload businesses and users
       await loadDashboard();
+      setError(''); // Clear any previous errors
+      setBusinessToReject(null);
     } catch (err: any) {
-      setError('Failed to reject business. Please try again.');
       console.error('Reject error:', err);
+      let friendlyMessage = 'We encountered an issue while rejecting this business registration. Please try again in a moment.';
+      
+      if (err.response?.data?.error) {
+        const backendError = err.response.data.error;
+        if (backendError.includes('not found') || backendError.includes('couldn\'t find')) {
+          friendlyMessage = backendError;
+        } else if (backendError.includes('Internal server error') || backendError.includes('encountered an issue')) {
+          friendlyMessage = backendError;
+        }
+      }
+      
+      showToast(friendlyMessage, 'error');
+      setError('');
+      setBusinessToReject(null);
     }
   };
 
@@ -189,6 +258,183 @@ export default function AdminDashboardPage() {
   };
 
   return (
+    <>
+      {/* Toast Notification */}
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        isVisible={toast.isVisible}
+        onClose={hideToast}
+        duration={toast.type === 'success' ? 4000 : 6000}
+      />
+
+      {/* Reject Confirmation Modal */}
+      {showRejectConfirm && businessToReject && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '1rem'
+          }}
+          onClick={() => {
+            setShowRejectConfirm(false);
+            setBusinessToReject(null);
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              marginBottom: '1.5rem'
+            }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                backgroundColor: '#fef2f2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+              </div>
+              <h2 style={{
+                margin: 0,
+                fontSize: '1.5rem',
+                fontWeight: '700',
+                color: 'var(--linkvesta-dark-blue)'
+              }}>
+                Confirm Rejection
+              </h2>
+            </div>
+
+            <p style={{
+              color: '#6b7280',
+              fontSize: '1rem',
+              lineHeight: '1.6',
+              marginBottom: '1.5rem'
+            }}>
+              Are you sure you want to reject and remove <strong style={{ color: 'var(--linkvesta-dark-blue)' }}>&quot;{businessToReject.name}&quot;</strong>?
+            </p>
+
+            <div style={{
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: '8px',
+              padding: '1rem',
+              marginBottom: '1.5rem'
+            }}>
+              <p style={{
+                margin: 0,
+                fontSize: '0.875rem',
+                color: '#991b1b',
+                lineHeight: '1.6'
+              }}>
+                <strong>This action will permanently:</strong>
+              </p>
+              <ul style={{
+                margin: '0.5rem 0 0 0',
+                paddingLeft: '1.5rem',
+                fontSize: '0.875rem',
+                color: '#991b1b',
+                lineHeight: '1.8'
+              }}>
+                <li>Remove the business from the platform</li>
+                <li>Delete the associated user registration</li>
+                <li>Remove any uploaded documents</li>
+              </ul>
+              <p style={{
+                margin: '0.75rem 0 0 0',
+                fontSize: '0.875rem',
+                color: '#991b1b',
+                fontWeight: '600'
+              }}>
+                This action cannot be undone.
+              </p>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={() => {
+                  setShowRejectConfirm(false);
+                  setBusinessToReject(null);
+                }}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: 'white',
+                  color: '#6b7280',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '0.9375rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f9fafb';
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'white';
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRejectBusiness}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.9375rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#dc2626';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#ef4444';
+                }}
+              >
+                Yes, Reject and Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#f9fafb'
@@ -789,58 +1035,132 @@ export default function AdminDashboardPage() {
                         {business.description}
                       </p>
                     )}
-                    {!business.approved && (
-                      <div style={{
-                        display: 'flex',
-                        gap: '0.5rem',
-                        marginTop: '0.5rem'
-                      }}>
-                        <button
-                          onClick={() => handleApproveBusiness(business.id)}
-                          style={{
-                            padding: '0.5rem 1rem',
-                            backgroundColor: '#10b981',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontSize: '0.875rem',
-                            fontWeight: '500',
-                            cursor: 'pointer',
-                            transition: 'background-color 0.2s'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#059669';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = '#10b981';
-                          }}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => handleRejectBusiness(business.id)}
-                          style={{
-                            padding: '0.5rem 1rem',
-                            backgroundColor: '#ef4444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontSize: '0.875rem',
-                            fontWeight: '500',
-                            cursor: 'pointer',
-                            transition: 'background-color 0.2s'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#dc2626';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = '#ef4444';
-                          }}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    )}
+                    <div style={{
+                      display: 'flex',
+                      gap: '0.5rem',
+                      marginTop: '0.5rem',
+                      flexWrap: 'wrap'
+                    }}>
+                      <button
+                        onClick={() => {
+                          // Find the user associated with this business
+                          // Method 1: Try to extract email from business description
+                          let associatedUser = null;
+                          
+                          if (business.description) {
+                            // Extract email from description (format: "submitted by email@example.com")
+                            const emailMatch = business.description.match(/submitted by\s+([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
+                            if (emailMatch && emailMatch[1]) {
+                              const email = emailMatch[1].toLowerCase().trim();
+                              console.log('Looking for user with email:', email);
+                              associatedUser = users.find(u => 
+                                u.accountType === 'startup' && 
+                                u.email?.toLowerCase().trim() === email
+                              );
+                            }
+                          }
+                          
+                          // Method 2: If not found by email, try matching by name (case-insensitive)
+                          if (!associatedUser) {
+                            associatedUser = users.find(u => 
+                              u.accountType === 'startup' && 
+                              u.name?.toLowerCase().trim() === business.name?.toLowerCase().trim()
+                            );
+                          }
+                          
+                          if (associatedUser) {
+                            setSelectedUser(associatedUser);
+                            setShowUserDetails(true);
+                          } else {
+                            console.error('User not found for business:', {
+                              businessName: business.name,
+                              businessDescription: business.description,
+                              availableStartupUsers: users.filter(u => u.accountType === 'startup').map(u => ({
+                                name: u.name,
+                                email: u.email
+                              }))
+                            });
+                            alert(`User details not found for "${business.name}".\n\nThis may happen if:\n- The user was deleted\n- The business was created manually\n- There's a mismatch in the data\n\nCheck the browser console for more details.`);
+                          }
+                        }}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          backgroundColor: 'var(--linkvesta-dark-blue)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.5rem'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#1e293b';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'var(--linkvesta-dark-blue)';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                          <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        View Details
+                      </button>
+                      {!business.approved && (
+                        <>
+                          <button
+                            onClick={() => handleApproveBusiness(business.id)}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              backgroundColor: '#10b981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              fontWeight: '500',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#059669';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#10b981';
+                            }}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectBusiness(business.id)}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              backgroundColor: '#ef4444',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              fontWeight: '500',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#dc2626';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#ef4444';
+                            }}
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1396,13 +1716,12 @@ export default function AdminDashboardPage() {
                             Business Registration Document
                           </p>
                           <div style={{
-                            padding: '1rem',
+                            padding: '1.5rem',
                             backgroundColor: '#f9fafb',
-                            border: '1px solid #e5e7eb',
+                            border: '2px solid #e5e7eb',
                             borderRadius: '8px',
                             display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
+                            flexDirection: 'column',
                             gap: '1rem'
                           }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -1415,43 +1734,90 @@ export default function AdminDashboardPage() {
                               </svg>
                               <span style={{
                                 color: 'var(--linkvesta-dark-blue)',
-                                fontSize: '0.875rem',
-                                fontWeight: '500'
+                                fontSize: '1rem',
+                                fontWeight: '600'
                               }}>
                                 {selectedUser.businessRegistrationDocument.split('/').pop() || 'Business Registration Document.pdf'}
                               </span>
                             </div>
-                            <a
-                              href={`${typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3002') : 'http://localhost:3002'}${selectedUser.businessRegistrationDocument}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                padding: '0.5rem 1rem',
-                                backgroundColor: 'var(--linkvesta-dark-blue)',
-                                color: 'white',
-                                textDecoration: 'none',
-                                borderRadius: '6px',
-                                fontSize: '0.875rem',
-                                fontWeight: '500',
-                                transition: 'all 0.2s',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.5rem'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = '#1e293b';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = 'var(--linkvesta-dark-blue)';
-                              }}
-                            >
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                                <polyline points="15 3 21 3 21 9"></polyline>
-                                <line x1="10" y1="14" x2="21" y2="3"></line>
-                              </svg>
-                              View Document
-                            </a>
+                            <div style={{
+                              display: 'flex',
+                              gap: '0.75rem',
+                              flexWrap: 'wrap'
+                            }}>
+                              <button
+                                onClick={() => {
+                                  const pdfUrl = `${typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3002') : 'http://localhost:3002'}${selectedUser.businessRegistrationDocument}`;
+                                  window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+                                }}
+                                style={{
+                                  padding: '0.75rem 1.5rem',
+                                  backgroundColor: 'var(--linkvesta-gold)',
+                                  color: 'var(--linkvesta-dark-blue)',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '0.875rem',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#f59e0b';
+                                  e.currentTarget.style.transform = 'translateY(-1px)';
+                                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'var(--linkvesta-gold)';
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                                }}
+                              >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                  <polyline points="15 3 21 3 21 9"></polyline>
+                                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                                Open PDF in New Tab
+                              </button>
+                              <button
+                                onClick={() => setShowPdfViewer(true)}
+                                style={{
+                                  padding: '0.75rem 1.5rem',
+                                  backgroundColor: 'var(--linkvesta-dark-blue)',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '0.875rem',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.5rem',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = '#1e293b';
+                                  e.currentTarget.style.transform = 'translateY(-1px)';
+                                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor = 'var(--linkvesta-dark-blue)';
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                                }}
+                              >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                  <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                                View PDF Here
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1559,6 +1925,133 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         )}
+
+        {/* PDF Viewer Modal */}
+        {showPdfViewer && selectedUser?.businessRegistrationDocument && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            display: 'flex',
+            flexDirection: 'column',
+            zIndex: 2000,
+            padding: '1rem'
+          }}>
+            {/* PDF Viewer Header */}
+            <div style={{
+              padding: '1rem 1.5rem',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1rem',
+              borderRadius: '8px'
+            }}>
+              <div>
+                <h3 style={{
+                  color: 'white',
+                  fontSize: '1.25rem',
+                  fontWeight: '600',
+                  margin: 0
+                }}>
+                  {selectedUser.businessRegistrationDocument.split('/').pop() || 'Business Registration Document.pdf'}
+                </h3>
+                <p style={{
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  fontSize: '0.875rem',
+                  margin: '0.25rem 0 0 0'
+                }}>
+                  {selectedUser.name} - Business Registration Document
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                <a
+                  href={`${typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3002') : 'http://localhost:3002'}${selectedUser.businessRegistrationDocument}`}
+                  download
+                  style={{
+                    padding: '0.5rem 1rem',
+                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                    color: 'white',
+                    textDecoration: 'none',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  Download
+                </a>
+                <button
+                  onClick={() => setShowPdfViewer(false)}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* PDF Viewer */}
+            <div style={{
+              flex: 1,
+              backgroundColor: '#1a1a1a',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <iframe
+                src={`${typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3002') : 'http://localhost:3002'}${selectedUser.businessRegistrationDocument}`}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none'
+                }}
+                title="Business Registration Document"
+              />
+            </div>
+          </div>
+        )}
       </main>
 
       <style>{`
@@ -1567,5 +2060,6 @@ export default function AdminDashboardPage() {
         }
       `}</style>
     </div>
+    </>
   );
 }
