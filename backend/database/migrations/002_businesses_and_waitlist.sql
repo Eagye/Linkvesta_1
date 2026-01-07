@@ -32,14 +32,5 @@ CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist(email);
 CREATE TRIGGER update_businesses_updated_at BEFORE UPDATE ON businesses
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Insert sample businesses (only if they don't exist)
-INSERT INTO businesses (name, category, description, category_color)
-SELECT * FROM (VALUES
-    ('Solarify', 'Energy', 'Pay-as-you-go solar solutions for off-grid communities.', '#fbbf24'),
-    ('EduLearn', 'Ed-Tech', 'AI-driven personalized learning for WASSCE students.', '#a855f7'),
-    ('LogiTrak', 'Logistics', 'Last-mile delivery infrastructure for e-commerce.', '#6b7280')
-) AS v(name, category, description, category_color)
-WHERE NOT EXISTS (
-    SELECT 1 FROM businesses WHERE businesses.name = v.name
-);
+-- No sample businesses inserted - businesses must be created and approved by admin
 

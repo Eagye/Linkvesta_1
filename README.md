@@ -203,8 +203,11 @@ Add new migration files in `backend/database/migrations/` following the naming c
 ### Auth Service (Port 3002)
 - `GET /health` - Health check
 - `GET /api/auth` - Service info
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
+- `POST /api/auth/register` - Regular user registration
+- `POST /api/auth/login` - Regular user login
+- `POST /api/auth/admin/register` - Admin registration
+- `POST /api/auth/admin/login` - Admin login
+- `POST /api/auth/verify` - Verify JWT token
 
 ## Environment Variables
 

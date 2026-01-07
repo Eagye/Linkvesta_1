@@ -1,501 +1,129 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import axios from 'axios';
-
-interface Business {
-  id: number;
-  name: string;
-  category: string;
-  description: string;
-  categoryColor: string;
-  logoUrl?: string;
-}
-
-// Fallback businesses for optimistic UI
-const fallbackBusinesses: Business[] = [
-  {
-    id: 1,
-    name: 'Solarify',
-    category: 'Energy',
-    description: 'Pay-as-you-go solar solutions for off-grid communities.',
-    categoryColor: '#fbbf24'
-  },
-  {
-    id: 2,
-    name: 'EduLearn',
-    category: 'Ed-Tech',
-    description: 'AI-driven personalized learning for WASSCE students.',
-    categoryColor: '#a855f7'
-  },
-  {
-    id: 3,
-    name: 'LogiTrak',
-    category: 'Logistics',
-    description: 'Last-mile delivery infrastructure for e-commerce.',
-    categoryColor: '#6b7280'
-  }
-];
-
-// Logo Component with fallback
-function BusinessLogo({ business }: { business: Business }) {
-  const [imageError, setImageError] = useState(false);
-
-  if (business.logoUrl && !imageError) {
-    return (
-      <img
-        src={business.logoUrl}
-        alt={`${business.name} logo`}
-        style={{
-          width: '80px',
-          height: '80px',
-          borderRadius: '50%',
-          objectFit: 'cover',
-          marginBottom: '0.5rem',
-          border: '2px solid #e5e7eb',
-          backgroundColor: '#f3f4f6'
-        }}
-        onError={() => setImageError(true)}
-      />
-    );
-  }
-
-  // Fallback: Show initial letter with gradient background
-  return (
-    <div style={{
-      width: '80px',
-      height: '80px',
-      borderRadius: '50%',
-      background: `linear-gradient(135deg, ${business.categoryColor || '#6b7280'}, ${business.categoryColor || '#6b7280'}dd)`,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: '0.5rem',
-      color: 'var(--linkvesta-white)',
-      fontSize: '1.5rem',
-      fontWeight: 'bold',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-    }}>
-      {business.name.charAt(0).toUpperCase()}
-    </div>
-  );
-}
-
-// Skeleton Loader Component
-function BusinessCardSkeleton() {
-  return (
-    <div
-      style={{
-        backgroundColor: 'var(--linkvesta-white)',
-        border: '1px solid #e5e7eb',
-        borderRadius: '8px',
-        padding: '2rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1rem',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        position: 'relative',
-        overflow: 'hidden'
-      }}
-    >
-      {/* Shimmer effect */}
-      <div className="skeleton-shimmer" />
-      <div
-        style={{
-          width: '80px',
-          height: '80px',
-          borderRadius: '50%',
-          backgroundColor: '#e5e7eb',
-          marginBottom: '0.5rem',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-        }}
-      />
-      <div
-        style={{
-          height: '1.5rem',
-          width: '60%',
-          backgroundColor: '#e5e7eb',
-          borderRadius: '4px'
-        }}
-      />
-      <div
-        style={{
-          height: '1.25rem',
-          width: '30%',
-          backgroundColor: '#e5e7eb',
-          borderRadius: '12px'
-        }}
-      />
-      <div
-        style={{
-          height: '3rem',
-          width: '100%',
-          backgroundColor: '#e5e7eb',
-          borderRadius: '4px',
-          marginTop: '0.5rem'
-        }}
-      />
-      <div
-        style={{
-          height: '2.5rem',
-          width: '100%',
-          backgroundColor: '#e5e7eb',
-          borderRadius: '4px',
-          marginTop: '0.5rem'
-        }}
-      />
-    </div>
-  );
-}
 
 export default function Home() {
-  // Start with fallback businesses for optimistic UI
-  const [businesses, setBusinesses] = useState<Business[]>(fallbackBusinesses);
-  const [loading, setLoading] = useState(true);
-  const [joiningWaitlist, setJoiningWaitlist] = useState<number | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedBusiness, setSelectedBusiness] = useState<number | null>(null);
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-
-  useEffect(() => {
-    fetchBusinesses();
-  }, []);
-
-  const fetchBusinesses = async () => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await axios.get(`${apiUrl}/api/businesses`, {
-        timeout: 5000,
-        validateStatus: (status) => status < 500
-      });
-      
-      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-        setBusinesses(response.data);
-      } else {
-        // If API returns empty or invalid data, keep fallback businesses
-        setBusinesses(fallbackBusinesses);
-      }
-    } catch (error) {
-      console.error('Error fetching businesses:', error);
-      // Keep fallback businesses if API fails
-      setBusinesses(fallbackBusinesses);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleJoinWaitlistClick = (businessId: number) => {
-    setSelectedBusiness(businessId);
-    setShowModal(true);
-    setEmail('');
-    setName('');
-  };
-
-  const handleJoinWaitlist = async () => {
-    if (!selectedBusiness || !email) {
-      alert('Please enter your email');
-      return;
-    }
-
-    setJoiningWaitlist(selectedBusiness);
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      await axios.post(`${apiUrl}/api/waitlist`, {
-        businessId: selectedBusiness,
-        email,
-        name: name || undefined
-      });
-      alert('Successfully joined the waitlist!');
-      setShowModal(false);
-      setEmail('');
-      setName('');
-      setSelectedBusiness(null);
-    } catch (error: any) {
-      console.error('Error joining waitlist:', error);
-      if (error.response?.status === 409) {
-        alert('You are already on the waitlist for this business.');
-      } else {
-        alert('Failed to join waitlist. Please try again.');
-      }
-    } finally {
-      setJoiningWaitlist(null);
-    }
-  };
-
-  const getCategoryColor = (category: string) => {
-    const colors: { [key: string]: string } = {
-      'Energy': '#fbbf24',
-      'Ed-Tech': '#a855f7',
-      'Logistics': '#6b7280'
-    };
-    return colors[category] || '#6b7280';
-  };
-
   return (
     <main style={{ 
-      padding: '4rem 2rem', 
-      minHeight: 'calc(100vh - 200px)',
-      backgroundColor: 'var(--linkvesta-white)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center'
+      width: '100%',
+      backgroundColor: 'var(--linkvesta-white)'
     }}>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        gap: '2rem',
-        maxWidth: '1200px',
-        width: '100%',
-        marginBottom: '3rem'
+      {/* Hero Section */}
+      <section style={{
+        padding: '6rem 2rem',
+        minHeight: '60vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.02) 1px, transparent 1px)',
+        backgroundSize: '20px 20px',
+        backgroundPosition: '0 0'
       }}>
-        {loading ? (
-          // Show skeleton loaders while loading
-          Array.from({ length: 3 }).map((_, index) => (
-            <BusinessCardSkeleton key={`skeleton-${index}`} />
-          ))
-        ) : businesses.length > 0 ? (
-          // Show actual business cards
-          businesses.map((business) => (
-              <div
-                key={business.id}
-                style={{
-                  backgroundColor: 'var(--linkvesta-white)',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  padding: '2rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1rem',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                  transition: 'transform 0.2s, box-shadow 0.2s'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-                }}
-              >
-                <BusinessLogo business={business} />
-                
-                <h3 style={{
-                  color: 'var(--linkvesta-dark-blue)',
-                  fontSize: '1.5rem',
-                  fontWeight: 'bold',
-                  margin: 0
-                }}>
-                  {business.name}
-                </h3>
-
-                <div style={{
-                  display: 'inline-block',
-                  backgroundColor: business.categoryColor || getCategoryColor(business.category),
-                  color: 'var(--linkvesta-white)',
-                  padding: '0.25rem 0.75rem',
-                  borderRadius: '12px',
-                  fontSize: '0.875rem',
-                  fontWeight: '600',
-                  width: 'fit-content'
-                }}>
-                  {business.category}
-                </div>
-
-                <p style={{
-                  color: 'var(--linkvesta-dark-blue)',
-                  fontSize: '1rem',
-                  lineHeight: '1.6',
-                  opacity: 0.8,
-                  margin: 0,
-                  flex: 1
-                }}>
-                  {business.description}
-                </p>
-
-                <button
-                  onClick={() => handleJoinWaitlistClick(business.id)}
-                  disabled={joiningWaitlist === business.id}
-                  style={{
-                    backgroundColor: 'var(--linkvesta-gold)',
-                    color: 'var(--linkvesta-dark-blue)',
-                    padding: '0.75rem 1.5rem',
-                    border: 'none',
-                    borderRadius: '4px',
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    cursor: joiningWaitlist === business.id ? 'not-allowed' : 'pointer',
-                    transition: 'opacity 0.2s',
-                    opacity: joiningWaitlist === business.id ? 0.6 : 1
-                  }}
-                  onMouseEnter={(e) => {
-                    if (joiningWaitlist !== business.id) {
-                      e.currentTarget.style.opacity = '0.9';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (joiningWaitlist !== business.id) {
-                      e.currentTarget.style.opacity = '1';
-                    }
-                  }}
-                >
-                  {joiningWaitlist === business.id ? 'Joining...' : 'Join Waitlist to View'}
-                </button>
-              </div>
-            ))
-        ) : (
-          // Fallback if no businesses available
-          <div style={{ 
-            gridColumn: '1 / -1', 
-            textAlign: 'center', 
-            color: 'var(--linkvesta-dark-blue)',
-            padding: '2rem'
-          }}>
-            <p style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>No businesses available at the moment.</p>
-            <p style={{ opacity: 0.8 }}>Please check back later.</p>
-          </div>
-        )}
-      </div>
-
-      {!loading && (
-        <Link
-            href="/faq"
-            style={{
-              backgroundColor: 'transparent',
-              color: 'var(--linkvesta-dark-blue)',
-              padding: '0.75rem 1.5rem',
-              border: '2px solid var(--linkvesta-dark-blue)',
-              borderRadius: '4px',
-              textDecoration: 'none',
-              fontWeight: '600',
-              fontSize: '1rem',
-              transition: 'all 0.2s',
-              display: 'inline-block'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--linkvesta-dark-blue)';
-              e.currentTarget.style.color = 'var(--linkvesta-white)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = 'var(--linkvesta-dark-blue)';
-            }}
-          >
-            View FAQ for Investors
-          </Link>
-      )}
-
-      {/* Modal */}
-      {showModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
+        <div style={{
+          maxWidth: '900px',
+          width: '100%',
+          textAlign: 'center'
+        }}>
+          {/* Tagline */}
+          <div style={{
+            display: 'inline-flex',
             alignItems: 'center',
+            gap: '0.5rem',
+            backgroundColor: 'var(--linkvesta-gold)',
+            color: 'var(--linkvesta-dark-blue)',
+            padding: '0.5rem 1rem',
+            borderRadius: '4px',
+            fontSize: '0.875rem',
+            fontWeight: '600',
+            marginBottom: '2rem'
+          }}>
+            <span>🇬🇭</span>
+            <span>BUILT FOR GHANA'S FUTURE</span>
+          </div>
+
+          {/* Main Headline */}
+          <h1 style={{
+            fontSize: 'clamp(2rem, 5vw, 3rem)',
+            fontWeight: 'bold',
+            color: 'var(--linkvesta-dark-blue)',
+            margin: '0 0 1.5rem 0',
+            lineHeight: '1.2',
+            letterSpacing: '-0.02em'
+          }}>
+            Connecting Ghanaian Businesses to Investors Who Believe in Their Potential.
+          </h1>
+
+          {/* Description */}
+          <p style={{
+            fontSize: 'clamp(1rem, 2vw, 1.25rem)',
+            color: '#6b7280',
+            margin: '0 auto 3rem auto',
+            lineHeight: '1.6',
+            maxWidth: '700px'
+          }}>
+            A trusted digital platform bridging high-growth African businesses with global and local capital.
+          </p>
+
+          {/* CTA Buttons */}
+          <div style={{
+            display: 'flex',
+            gap: '1rem',
             justifyContent: 'center',
-            zIndex: 1000
-          }}
-          onClick={() => setShowModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: 'var(--linkvesta-white)',
-              padding: '2rem',
-              borderRadius: '8px',
-              maxWidth: '500px',
-              width: '90%',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.5rem'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{
-              color: 'var(--linkvesta-dark-blue)',
-              fontSize: '1.5rem',
-              fontWeight: 'bold',
-              margin: 0
-            }}>
-              Join Waitlist
-            </h2>
-            <p style={{
-              color: 'var(--linkvesta-dark-blue)',
-              opacity: 0.8,
-              margin: 0
-            }}>
-              Enter your details to join the waitlist and get early access to view this business.
-            </p>
-            <input
-              type="email"
-              placeholder="Email *"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
+            flexWrap: 'wrap'
+          }}>
+            <Link
+              href="/register/form?type=investor"
               style={{
-                padding: '0.875rem',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
+                backgroundColor: 'var(--linkvesta-gold)',
+                color: 'var(--linkvesta-dark-blue)',
+                padding: '1rem 2rem',
+                borderRadius: '8px',
+                textDecoration: 'none',
                 fontSize: '1rem',
-                color: 'var(--linkvesta-dark-blue)'
+                fontWeight: '600',
+                transition: 'all 0.2s',
+                display: 'inline-block'
               }}
-            />
-            <input
-              type="text"
-              placeholder="Name (optional)"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              Join as an Investor
+            </Link>
+            <Link
+              href="/register/form?type=startup"
               style={{
-                padding: '0.875rem',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
+                backgroundColor: 'transparent',
+                color: 'var(--linkvesta-dark-blue)',
+                padding: '1rem 2rem',
+                border: '2px solid var(--linkvesta-dark-blue)',
+                borderRadius: '8px',
+                textDecoration: 'none',
                 fontSize: '1rem',
-                color: 'var(--linkvesta-dark-blue)'
+                fontWeight: '600',
+                transition: 'all 0.2s',
+                display: 'inline-block'
               }}
-            />
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowModal(false)}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  backgroundColor: 'transparent',
-                  color: 'var(--linkvesta-dark-blue)',
-                  cursor: 'pointer',
-                  fontWeight: '600'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleJoinWaitlist}
-                disabled={joiningWaitlist !== null || !email}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  border: 'none',
-                  borderRadius: '4px',
-                  backgroundColor: 'var(--linkvesta-gold)',
-                  color: 'var(--linkvesta-dark-blue)',
-                  cursor: joiningWaitlist !== null || !email ? 'not-allowed' : 'pointer',
-                  fontWeight: '600',
-                  opacity: joiningWaitlist !== null || !email ? 0.6 : 1
-                }}
-              >
-                {joiningWaitlist !== null ? 'Joining...' : 'Join Waitlist'}
-              </button>
-            </div>
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--linkvesta-dark-blue)';
+                e.currentTarget.style.color = 'var(--linkvesta-white)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = 'var(--linkvesta-dark-blue)';
+              }}
+            >
+              Join as a Business
+            </Link>
           </div>
         </div>
-      )}
+      </section>
     </main>
   );
 }
-

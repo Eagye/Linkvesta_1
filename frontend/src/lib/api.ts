@@ -55,5 +55,42 @@ export const apiService = {
     const response = await apiClient.get(`/api/waitlist/${businessId}`);
     return response.data;
   },
+
+  // Admin methods (require authentication token)
+  async getAllBusinesses(token: string) {
+    const response = await apiClient.get('/api/admin/businesses', {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  async approveBusiness(id: number, token: string) {
+    const response = await apiClient.post(`/api/admin/businesses/${id}/approve`, {}, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  async rejectBusiness(id: number, token: string) {
+    const response = await apiClient.post(`/api/admin/businesses/${id}/reject`, {}, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  async getAllUsers(token: string) {
+    const response = await apiClient.get('/api/admin/users', {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
 };
 

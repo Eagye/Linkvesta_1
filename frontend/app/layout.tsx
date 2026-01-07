@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import Header from './components/Header';
-import Footer from './components/Footer';
+import ConditionalLayout from './components/ConditionalLayout';
 
 export const metadata: Metadata = {
   title: 'LinkVesta - Bridging Capital',
@@ -21,11 +20,9 @@ export default function RootLayout({
         minHeight: '100vh',
         margin: 0
       }}>
-        <Header />
-        <div style={{ flex: 1 }}>
+        <ConditionalLayout>
           {children}
-        </div>
-        <Footer />
+        </ConditionalLayout>
       </body>
     </html>
   );
