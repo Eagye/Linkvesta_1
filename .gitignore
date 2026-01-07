@@ -34,3 +34,10 @@ Thumbs.db
 # Docker
 docker-compose.override.yml
 
+# User uploads - should not be committed to git
+backend/services/auth/uploads/
+backend/services/auth/backend/
+backend/services/*/uploads/
+**/uploads/
+*.pdf
+!**/node_modules/**/*.pdf
