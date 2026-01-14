@@ -118,19 +118,20 @@ export default function HowItWorksPage() {
     <main style={{
       minHeight: 'calc(100vh - 200px)',
       backgroundColor: 'var(--linkvesta-white)',
-      padding: '4rem 2rem'
+      padding: 'clamp(2rem, 6vw, 4rem) clamp(1rem, 3vw, 2rem)'
     }}>
       <div style={{
         maxWidth: '1200px',
         margin: '0 auto',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center'
+        alignItems: 'center',
+        width: '100%'
       }}>
         {/* Title Section */}
         <h1 style={{
           color: 'var(--linkvesta-dark-blue)',
-          fontSize: '2.5rem',
+          fontSize: 'clamp(1.75rem, 5vw, 2.5rem)',
           marginBottom: '1rem',
           fontWeight: 'bold',
           textAlign: 'center'
@@ -139,8 +140,8 @@ export default function HowItWorksPage() {
         </h1>
         <p style={{
           color: 'var(--linkvesta-dark-blue)',
-          fontSize: '1.125rem',
-          marginBottom: '3rem',
+          fontSize: 'clamp(1rem, 2.5vw, 1.125rem)',
+          marginBottom: 'clamp(2rem, 5vw, 3rem)',
           textAlign: 'center',
           opacity: 0.8
         }}>
@@ -193,8 +194,8 @@ export default function HowItWorksPage() {
         {/* Steps Grid */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '2rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))',
+          gap: 'clamp(1.5rem, 4vw, 2rem)',
           width: '100%',
           maxWidth: '1000px'
         }}>
@@ -204,12 +205,13 @@ export default function HowItWorksPage() {
               style={{
                 backgroundColor: '#f9fafb',
                 borderRadius: '8px',
-                padding: '2rem',
+                padding: 'clamp(1.5rem, 4vw, 2rem)',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 textAlign: 'center',
-                border: '1px solid #e5e7eb'
+                border: '1px solid #e5e7eb',
+                width: '100%'
               }}
             >
               {/* Icon with Number Badge */}

@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { getApiUrl, getAuthUrl } from './config';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = getApiUrl();
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -66,6 +67,18 @@ export const apiService = {
     return response.data;
   },
 
+  async updateBusiness(id: number, description: string, category: string, token: string) {
+    const response = await apiClient.put(`/api/admin/businesses/${id}`, {
+      description,
+      category
+    }, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
   async approveBusiness(id: number, token: string) {
     const response = await apiClient.post(`/api/admin/businesses/${id}/approve`, {}, {
       headers: {
@@ -84,8 +97,49 @@ export const apiService = {
     return response.data;
   },
 
+  async deleteBusiness(id: number, reason: string, token: string) {
+    const response = await apiClient.delete(`/api/admin/businesses/${id}`, {
+      data: { reason },
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
   async getAllUsers(token: string) {
     const response = await apiClient.get('/api/admin/users', {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  // Investor management methods (require authentication token)
+  async getAllInvestors(token: string) {
+    const authUrl = getAuthUrl();
+    const response = await axios.get(`${authUrl}/api/auth/investors`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data.investors || [];
+  },
+
+  async approveInvestor(id: number, token: string) {
+    const authUrl = getAuthUrl();
+    const response = await axios.post(`${authUrl}/api/auth/investors/${id}/approve`, {}, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    return response.data;
+  },
+
+  async rejectInvestor(id: number, reason: string, token: string) {
+    const authUrl = getAuthUrl();
+    const response = await axios.post(`${authUrl}/api/auth/investors/${id}/reject`, { reason }, {
       headers: {
         Authorization: `Bearer ${token}`
       }

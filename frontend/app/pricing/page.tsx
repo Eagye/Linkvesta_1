@@ -5,19 +5,20 @@ export default function PricingPage() {
     <main style={{
       minHeight: 'calc(100vh - 200px)',
       backgroundColor: 'var(--linkvesta-white)',
-      padding: '3rem 2rem'
+      padding: 'clamp(1.5rem, 4vw, 3rem) clamp(1rem, 3vw, 2rem)'
     }}>
       <div style={{
         maxWidth: '1200px',
         margin: '0 auto',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center'
+        alignItems: 'center',
+        width: '100%'
       }}>
         {/* Title Section */}
         <h1 style={{
           color: 'var(--linkvesta-dark-blue)',
-          fontSize: '2.5rem',
+          fontSize: 'clamp(1.75rem, 5vw, 2.5rem)',
           marginBottom: '1rem',
           fontWeight: 'bold',
           textAlign: 'center'
@@ -26,8 +27,8 @@ export default function PricingPage() {
         </h1>
         <p style={{
           color: 'var(--linkvesta-dark-blue)',
-          fontSize: '1.125rem',
-          marginBottom: '3rem',
+          fontSize: 'clamp(1rem, 2.5vw, 1.125rem)',
+          marginBottom: 'clamp(2rem, 5vw, 3rem)',
           textAlign: 'center',
           opacity: 0.8
         }}>
@@ -37,8 +38,8 @@ export default function PricingPage() {
         {/* Pricing Cards */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-          gap: '2rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
+          gap: 'clamp(1.5rem, 4vw, 2rem)',
           width: '100%',
           maxWidth: '900px'
         }}>
@@ -47,9 +48,10 @@ export default function PricingPage() {
             backgroundColor: 'var(--linkvesta-white)',
             border: '1px solid #e5e7eb',
             borderRadius: '8px',
-            padding: '2.5rem',
+            padding: 'clamp(1.5rem, 4vw, 2.5rem)',
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            borderTop: '4px solid var(--linkvesta-dark-blue)'
+            borderTop: '4px solid var(--linkvesta-dark-blue)',
+            width: '100%'
           }}>
             <h2 style={{
               color: 'var(--linkvesta-dark-blue)',
@@ -182,9 +184,10 @@ export default function PricingPage() {
             backgroundColor: 'var(--linkvesta-white)',
             border: '1px solid #e5e7eb',
             borderRadius: '8px',
-            padding: '2.5rem',
+            padding: 'clamp(1.5rem, 4vw, 2.5rem)',
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            borderTop: '4px solid var(--linkvesta-gold)'
+            borderTop: '4px solid var(--linkvesta-gold)',
+            width: '100%'
           }}>
             <h2 style={{
               color: 'var(--linkvesta-dark-blue)',

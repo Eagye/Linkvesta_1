@@ -9,9 +9,15 @@ export const pool = new Pool({
   database: process.env.DB_NAME || 'linkvesta',
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  // Connection pool settings - optimized for multiple concurrent users
+  max: parseInt(process.env.DB_POOL_MAX || '50'), // Increased from 20 to 50 for better concurrency
+  min: parseInt(process.env.DB_POOL_MIN || '5'), // Minimum connections to keep alive
+  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000'), // 30 seconds
+  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '10000'), // 10 seconds
+  statement_timeout: parseInt(process.env.DB_STATEMENT_TIMEOUT || '30000'), // 30 second query timeout
+  query_timeout: parseInt(process.env.DB_QUERY_TIMEOUT || '30000'), // 30 seconds
+  // Allow connection reuse
+  allowExitOnIdle: false,
 });
 
 pool.on('connect', () => {

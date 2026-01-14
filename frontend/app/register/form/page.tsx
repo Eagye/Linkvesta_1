@@ -1,12 +1,37 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authService } from '@/src/lib/auth';
 import TermsDialog from '@/app/components/TermsDialog';
 import Toast from '@/app/components/Toast';
 import zxcvbn from 'zxcvbn';
+import { isDisposableEmail, getDisposableEmailMessage } from '@/src/utils/disposableEmail';
+
+// Comprehensive list of all countries
+const COUNTRIES = [
+  'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria',
+  'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan',
+  'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cabo Verde', 'Cambodia',
+  'Cameroon', 'Canada', 'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros', 'Congo', 'Costa Rica',
+  'Croatia', 'Cuba', 'Cyprus', 'Czech Republic', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic', 'Ecuador', 'Egypt',
+  'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia', 'Fiji', 'Finland', 'France', 'Gabon',
+  'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Grenada', 'Guatemala', 'Guinea', 'Guinea-Bissau', 'Guyana',
+  'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel',
+  'Italy', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kiribati', 'Kosovo', 'Kuwait', 'Kyrgyzstan',
+  'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Lithuania', 'Luxembourg', 'Madagascar',
+  'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Malta', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico', 'Micronesia',
+  'Moldova', 'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nauru', 'Nepal',
+  'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman', 'Pakistan',
+  'Palau', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland', 'Portugal', 'Qatar',
+  'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'Sao Tome and Principe', 'Saudi Arabia',
+  'Senegal', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands', 'Somalia', 'South Africa',
+  'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland', 'Syria', 'Taiwan',
+  'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey', 'Turkmenistan',
+  'Tuvalu', 'Uganda', 'Ukraine', 'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City',
+  'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe'
+].sort(); // Sort alphabetically
 
 function RegisterFormContent() {
   const router = useRouter();
@@ -19,7 +44,7 @@ function RegisterFormContent() {
     phoneNumber: '',
     password: '',
     confirmPassword: '',
-    country: 'Ghana',
+    country: '',
     tin: '',
     businessRegistrationDocument: null as File | null,
     termsAgreed: false
@@ -35,12 +60,69 @@ function RegisterFormContent() {
     isVisible: false
   });
 
+  // Country selector state
+  const [countrySearch, setCountrySearch] = useState('');
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const countryDropdownRef = useRef<HTMLDivElement>(null);
+  const highlightedItemRef = useRef<HTMLDivElement>(null);
+
   // Redirect if no account type selected
   useEffect(() => {
     if (!accountType || (accountType !== 'investor' && accountType !== 'startup')) {
       router.push('/register');
     }
   }, [accountType, router]);
+
+  // Filter countries based on search
+  const filteredCountries = COUNTRIES.filter(country =>
+    country.toLowerCase().includes(countrySearch.toLowerCase())
+  );
+
+  // Handle country selection
+  const handleCountrySelect = (country: string) => {
+    setFormData(prev => ({ ...prev, country }));
+    setCountrySearch('');
+    setShowCountryDropdown(false);
+    setHighlightedIndex(-1);
+    // Clear country error when a country is selected
+    if (errors.country) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.country;
+        return newErrors;
+      });
+    }
+  };
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.country-selector-container')) {
+        setShowCountryDropdown(false);
+        setHighlightedIndex(-1);
+        // Reset search to selected country when closing
+        if (formData.country) {
+          setCountrySearch(formData.country);
+        } else {
+          setCountrySearch('');
+        }
+      }
+    };
+
+    if (showCountryDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showCountryDropdown, formData.country]);
+
+  // Initialize search with selected country
+  useEffect(() => {
+    if (formData.country) {
+      setCountrySearch(formData.country);
+    }
+  }, [formData.country]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -149,8 +231,8 @@ function RegisterFormContent() {
     let firstError = '';
 
     if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
-      if (!firstError) firstError = 'Please provide your full name to continue.';
+      newErrors.fullName = accountType === 'startup' ? 'Full business name is required' : 'Full name is required';
+      if (!firstError) firstError = accountType === 'startup' ? 'Please provide your full business name to continue.' : 'Please provide your full name to continue.';
     }
 
     if (!formData.email.trim()) {
@@ -159,6 +241,9 @@ function RegisterFormContent() {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
       if (!firstError) firstError = 'Please enter a valid email address (e.g., name@example.com).';
+    } else if (isDisposableEmail(formData.email)) {
+      newErrors.email = 'Disposable email not allowed';
+      if (!firstError) firstError = getDisposableEmailMessage();
     }
 
     if (!formData.password) {
@@ -257,17 +342,28 @@ function RegisterFormContent() {
         formData.businessRegistrationDocument || undefined
       );
 
-      // Store token if provided
-      if (response.token) {
+      // Check if email verification is required
+      if (response.requiresVerification) {
+        showToast('Registration successful! Please check your email to verify your account before logging in.', 'success');
+        // Redirect to a page showing verification instructions
+        setTimeout(() => {
+          router.push('/register/verify-instructions');
+        }, 3000);
+      } else if (response.token) {
+        // Legacy support: if token is provided, store it
         localStorage.setItem('token', response.token);
         localStorage.setItem('user', JSON.stringify(response.user));
+        showToast('Welcome to Linkvesta! Your account has been created successfully. You are now logged in.', 'success');
+        setTimeout(() => {
+          router.push('/');
+        }, 2000);
+      } else {
+        // Default success message
+        showToast('Registration successful! Please check your email to verify your account.', 'success');
+        setTimeout(() => {
+          router.push('/register/verify-instructions');
+        }, 3000);
       }
-
-      // Show success message and redirect
-      showToast('Welcome to Linkvesta! Your account has been created successfully. You are now logged in.', 'success');
-      setTimeout(() => {
-        router.push('/');
-      }, 2000);
     } catch (error: any) {
       console.error('Registration error:', error);
       
@@ -279,6 +375,8 @@ function RegisterFormContent() {
         
         if (backendError.includes('already exists')) {
           friendlyMessage = 'An account with this email address already exists. Please use a different email or try logging in.';
+        } else if (backendError.includes('disposable') || backendError.includes('temporary') || backendError.includes('permanent email')) {
+          friendlyMessage = getDisposableEmailMessage();
         } else if (backendError.includes('TIN') || backendError.includes('Tax Identification')) {
           friendlyMessage = 'Please provide your Tax Identification Number (TIN) to complete your business registration.';
         } else if (backendError.includes('Business registration document') || backendError.includes('PDF')) {
@@ -312,20 +410,20 @@ function RegisterFormContent() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '2rem',
+      padding: 'clamp(1rem, 4vw, 2rem)',
       backgroundColor: 'var(--linkvesta-white)'
     }}>
       <div style={{
         maxWidth: '600px',
         width: '100%',
         backgroundColor: 'var(--linkvesta-white)',
-        padding: '3rem',
+        padding: 'clamp(1.5rem, 5vw, 3rem)',
         borderRadius: '8px',
         boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
       }}>
         {/* Page Title */}
         <h1 style={{
-          fontSize: '2rem',
+          fontSize: 'clamp(1.5rem, 4vw, 2rem)',
           fontWeight: 'bold',
           color: 'var(--linkvesta-dark-blue)',
           marginBottom: '0.5rem',
@@ -375,7 +473,7 @@ function RegisterFormContent() {
                 marginBottom: '0.5rem'
               }}
             >
-              Full Name <span style={{ color: '#ef4444' }}>*</span>
+              {accountType === 'startup' ? 'Full Business Name' : 'Full Name'} <span style={{ color: '#ef4444' }}>*</span>
             </label>
             <input
               type="text"
@@ -396,7 +494,7 @@ function RegisterFormContent() {
                 outline: 'none',
                 backgroundColor: '#ffffff'
               }}
-              placeholder="Enter your legal name"
+              placeholder={accountType === 'startup' ? 'Enter your full business name' : 'Enter your legal name'}
               onFocus={(e) => {
                 if (!errors.fullName) {
                   e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
@@ -768,7 +866,7 @@ function RegisterFormContent() {
 
           {/* Country - Required for Investor/Startup only (not shown for User) */}
           {(accountType === 'investor' || accountType === 'startup') && (
-            <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ marginBottom: '1.5rem' }} className="country-selector-container">
               <label
                 htmlFor="country"
                 style={{
@@ -781,30 +879,253 @@ function RegisterFormContent() {
               >
                 Country <span style={{ color: '#ef4444' }}>*</span>
               </label>
-              <select
-                id="country"
+              {/* Hidden input for form validation */}
+              <input
+                type="hidden"
                 name="country"
                 value={formData.country}
-                onChange={handleChange}
                 required
-                style={{
-                  width: '100%',
-                  padding: '0.875rem',
-                  border: `1px solid ${errors.country ? '#ef4444' : '#e5e7eb'}`,
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                  color: 'var(--linkvesta-dark-blue)',
-                  backgroundColor: 'var(--linkvesta-white)',
-                  boxSizing: 'border-box',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="Ghana">Ghana</option>
-                <option value="Nigeria">Nigeria</option>
-                <option value="Kenya">Kenya</option>
-                <option value="South Africa">South Africa</option>
-                <option value="Other">Other</option>
-              </select>
+              />
+              <div style={{ position: 'relative' }}>
+                <div
+                  style={{
+                    position: 'relative',
+                    width: '100%'
+                  }}
+                >
+                  <input
+                    type="text"
+                    id="country-search"
+                    value={countrySearch}
+                    onChange={(e) => {
+                      setCountrySearch(e.target.value);
+                      setShowCountryDropdown(true);
+                      setHighlightedIndex(-1);
+                    }}
+                    onClick={() => {
+                      if (!showCountryDropdown) {
+                        setShowCountryDropdown(true);
+                        if (!formData.country) {
+                          setCountrySearch('');
+                        }
+                      }
+                    }}
+                    onFocus={(e) => {
+                      setShowCountryDropdown(true);
+                      if (!formData.country) {
+                        setCountrySearch('');
+                      }
+                      e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(26, 35, 50, 0.1)';
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setShowCountryDropdown(true);
+                        setHighlightedIndex(prev => 
+                          prev < filteredCountries.length - 1 ? prev + 1 : prev
+                        );
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setHighlightedIndex(prev => prev > 0 ? prev - 1 : -1);
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (highlightedIndex >= 0 && filteredCountries[highlightedIndex]) {
+                          handleCountrySelect(filteredCountries[highlightedIndex]);
+                        } else if (filteredCountries.length === 1) {
+                          handleCountrySelect(filteredCountries[0]);
+                        }
+                      } else if (e.key === 'Escape') {
+                        setShowCountryDropdown(false);
+                        setCountrySearch(formData.country || '');
+                      }
+                    }}
+                    placeholder={formData.country || "Search or select a country"}
+                    style={{
+                      width: '100%',
+                      padding: '0.875rem 2.5rem 0.875rem 2.75rem',
+                      border: `1px solid ${errors.country ? '#ef4444' : '#e5e7eb'}`,
+                      borderRadius: '8px',
+                      fontSize: '1rem',
+                      color: 'var(--linkvesta-dark-blue)',
+                      backgroundColor: 'var(--linkvesta-white)',
+                      boxSizing: 'border-box',
+                      cursor: 'text',
+                      transition: 'all 0.2s ease',
+                      outline: 'none'
+                    }}
+                    onBlur={(e) => {
+                      // Delay to allow click on dropdown items
+                      setTimeout(() => {
+                        e.currentTarget.style.borderColor = errors.country ? '#ef4444' : '#e5e7eb';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }, 200);
+                    }}
+                  />
+                  {/* Search Icon */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '0.875rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      pointerEvents: 'none',
+                      color: '#9ca3af',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                  </div>
+                  {/* Dropdown Arrow */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: '0.875rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      pointerEvents: 'auto',
+                      color: '#6b7280',
+                      transition: 'transform 0.2s ease',
+                      cursor: 'pointer',
+                      padding: '0.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setShowCountryDropdown(!showCountryDropdown);
+                      if (!showCountryDropdown) {
+                        setCountrySearch(formData.country || '');
+                      }
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      style={{
+                        transform: showCountryDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s ease'
+                      }}
+                    >
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Dropdown List */}
+                {showCountryDropdown && (
+                  <div
+                    ref={countryDropdownRef}
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      marginTop: '0.5rem',
+                      backgroundColor: 'var(--linkvesta-white)',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
+                      maxHeight: '320px',
+                      overflowY: 'auto',
+                      zIndex: 1000,
+                      animation: 'fadeIn 0.2s ease'
+                    }}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {filteredCountries.length > 0 ? (
+                      <>
+                        {filteredCountries.length > 5 && (
+                          <div
+                            style={{
+                              padding: '0.75rem 1rem',
+                              backgroundColor: '#f9fafb',
+                              borderBottom: '1px solid #e5e7eb',
+                              fontSize: '0.75rem',
+                              color: '#6b7280',
+                              fontWeight: '600',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
+                              position: 'sticky',
+                              top: 0,
+                              zIndex: 1
+                            }}
+                          >
+                            {filteredCountries.length} {filteredCountries.length === 1 ? 'country' : 'countries'} found
+                          </div>
+                        )}
+                        {filteredCountries.map((country, index) => (
+                          <div
+                            key={country}
+                            ref={highlightedIndex === index ? highlightedItemRef : null}
+                            onClick={() => handleCountrySelect(country)}
+                            onMouseEnter={() => setHighlightedIndex(index)}
+                            style={{
+                              padding: '0.875rem 1rem',
+                              cursor: 'pointer',
+                              backgroundColor: highlightedIndex === index ? '#f3f4f6' : 'transparent',
+                              color: 'var(--linkvesta-dark-blue)',
+                              fontSize: '0.95rem',
+                              transition: 'background-color 0.15s ease',
+                              borderBottom: index < filteredCountries.length - 1 ? '1px solid #f3f4f6' : 'none',
+                              fontWeight: highlightedIndex === index ? '500' : '400'
+                            }}
+                          >
+                            {country}
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <div
+                        style={{
+                          padding: '1.5rem',
+                          textAlign: 'center',
+                          color: '#6b7280',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        <svg
+                          width="48"
+                          height="48"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          style={{ margin: '0 auto 0.5rem', opacity: 0.5 }}
+                        >
+                          <circle cx="11" cy="11" r="8"></circle>
+                          <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                        <p>No countries found matching "{countrySearch}"</p>
+                        <p style={{ fontSize: '0.75rem', marginTop: '0.25rem', opacity: 0.7 }}>
+                          Try a different search term
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               {errors.country && (
                 <p style={{ 
                   color: '#dc2626', 

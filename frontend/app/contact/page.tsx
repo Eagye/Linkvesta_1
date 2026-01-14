@@ -19,21 +19,22 @@ export default function ContactPage() {
     <main style={{
       minHeight: 'calc(100vh - 200px)',
       backgroundColor: 'var(--linkvesta-white)',
-      padding: '3rem 2rem'
+      padding: 'clamp(1.5rem, 4vw, 3rem) clamp(1rem, 3vw, 2rem)'
     }}>
       <div style={{
         maxWidth: '1200px',
         margin: '0 auto',
         display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '3rem',
-        alignItems: 'start'
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))',
+        gap: 'clamp(2rem, 5vw, 3rem)',
+        alignItems: 'start',
+        width: '100%'
       }}>
         {/* Left Column - Contact Form */}
         <div>
           <h1 style={{
             color: 'var(--linkvesta-dark-blue)',
-            fontSize: '2rem',
+            fontSize: 'clamp(1.5rem, 4vw, 2rem)',
             marginBottom: '2rem',
             fontWeight: 'bold'
           }}>
@@ -153,7 +154,7 @@ export default function ContactPage() {
           {/* Map Placeholder */}
           <div style={{
             width: '100%',
-            height: '400px',
+            height: 'clamp(250px, 50vw, 400px)',
             backgroundColor: '#333',
             borderRadius: '4px',
             display: 'flex',

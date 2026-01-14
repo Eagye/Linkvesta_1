@@ -7,10 +7,10 @@ export default function Footer() {
     <footer style={{
       backgroundColor: 'var(--linkvesta-dark-blue)',
       color: 'var(--linkvesta-white)',
-      padding: '3rem 2rem 1.5rem',
+      padding: 'clamp(2rem, 5vw, 3rem) clamp(1rem, 3vw, 2rem) 1.5rem',
       display: 'flex',
       flexWrap: 'wrap',
-      gap: '3rem',
+      gap: 'clamp(2rem, 5vw, 3rem)',
       justifyContent: 'space-between',
       width: '100%'
     }}>
@@ -26,7 +26,7 @@ export default function Footer() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '3rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 'clamp(1.5rem, 4vw, 3rem)', flexWrap: 'wrap', width: '100%' }}>
         <div>
           <div style={{ fontWeight: 'bold', marginBottom: '1rem', fontSize: '0.875rem' }}>
             COMPANY

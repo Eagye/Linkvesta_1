@@ -10,7 +10,7 @@ export default function Home() {
     }}>
       {/* Hero Section */}
       <section style={{
-        padding: '6rem 2rem',
+        padding: 'clamp(3rem, 8vw, 6rem) clamp(1rem, 4vw, 2rem)',
         minHeight: '60vh',
         display: 'flex',
         flexDirection: 'column',
@@ -70,20 +70,24 @@ export default function Home() {
             display: 'flex',
             gap: '1rem',
             justifyContent: 'center',
-            flexWrap: 'wrap'
+            flexWrap: 'wrap',
+            width: '100%'
           }}>
             <Link
               href="/register/form?type=investor"
               style={{
                 backgroundColor: 'var(--linkvesta-gold)',
                 color: 'var(--linkvesta-dark-blue)',
-                padding: '1rem 2rem',
+                padding: 'clamp(0.875rem, 2vw, 1rem) clamp(1.5rem, 4vw, 2rem)',
                 borderRadius: '8px',
                 textDecoration: 'none',
-                fontSize: '1rem',
+                fontSize: 'clamp(0.875rem, 2vw, 1rem)',
                 fontWeight: '600',
                 transition: 'all 0.2s',
-                display: 'inline-block'
+                display: 'inline-block',
+                width: '100%',
+                maxWidth: '300px',
+                textAlign: 'center'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)';
@@ -101,14 +105,17 @@ export default function Home() {
               style={{
                 backgroundColor: 'transparent',
                 color: 'var(--linkvesta-dark-blue)',
-                padding: '1rem 2rem',
+                padding: 'clamp(0.875rem, 2vw, 1rem) clamp(1.5rem, 4vw, 2rem)',
                 border: '2px solid var(--linkvesta-dark-blue)',
                 borderRadius: '8px',
                 textDecoration: 'none',
-                fontSize: '1rem',
+                fontSize: 'clamp(0.875rem, 2vw, 1rem)',
                 fontWeight: '600',
                 transition: 'all 0.2s',
-                display: 'inline-block'
+                display: 'inline-block',
+                width: '100%',
+                maxWidth: '300px',
+                textAlign: 'center'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = 'var(--linkvesta-dark-blue)';

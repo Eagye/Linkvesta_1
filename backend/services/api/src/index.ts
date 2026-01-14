@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
 import path from 'path';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { pool } from './config/database';
 import { storageService } from './services/storage';
 
@@ -14,10 +16,66 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Trust proxy for accurate IP detection (important for rate limiting behind load balancers)
+if (process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
+// Security middleware - must be applied early
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  frameguard: { action: 'deny' },
+  noSniff: true,
+  xssFilter: true,
+}));
+
+// CORS configuration - restrict origins properly
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://127.0.0.1:3000'];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400
+}));
+
+// Body parsing with size limits
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// General rate limiting
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(generalLimiter);
 
 // Health check
 app.get('/health', async (req: Request, res: Response) => {
@@ -156,24 +214,169 @@ app.get('/api/admin/businesses', authenticateAdmin, async (req: Request, res: Re
   }
 });
 
-// Admin endpoint - Approve business
-app.post('/api/admin/businesses/:id/approve', authenticateAdmin, async (req: Request, res: Response) => {
+// Admin endpoint - Update business details (description and category)
+app.put('/api/admin/businesses/:id', authenticateAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
-      'UPDATE businesses SET approved = true WHERE id = $1 RETURNING id, name, approved',
-      [id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'We couldn\'t find the business you\'re trying to approve. It may have already been removed.' });
+    const { description, category } = req.body;
+
+    // Validation
+    if (!description || !description.trim()) {
+      return res.status(400).json({ error: 'Business description is required before approval.' });
     }
-    res.json({ message: `Great! "${result.rows[0].name}" has been approved and is now visible to investors on the platform.`, business: result.rows[0] });
+    if (!category || !category.trim()) {
+      return res.status(400).json({ error: 'Business category is required before approval.' });
+    }
+
+    // Valid categories
+    const validCategories = ['Agri-Tech', 'Fintech', 'Health-Tech', 'Energy', 'Ed-Tech', 'Logistics', 'Other'];
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({ error: `Invalid category. Must be one of: ${validCategories.join(', ')}` });
+    }
+
+    // Category colors mapping
+    const categoryColors: Record<string, string> = {
+      'Agri-Tech': '#10b981',
+      'Fintech': '#3b82f6',
+      'Health-Tech': '#ef4444',
+      'Energy': '#fbbf24',
+      'Ed-Tech': '#a855f7',
+      'Logistics': '#6b7280',
+      'Other': '#6b7280'
+    };
+
+    const categoryColor = categoryColors[category] || '#6b7280';
+
+    const result = await pool.query(
+      `UPDATE businesses 
+       SET description = $1, category = $2, category_color = $3, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $4 
+       RETURNING id, name, category, description, category_color as "categoryColor", approved`,
+      [description.trim(), category, categoryColor, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Business record not found. It may have been removed.' });
+    }
+
+    res.json({ 
+      message: 'Business details have been updated.', 
+      business: result.rows[0] 
+    });
   } catch (error) {
     console.error('Database error:', error);
     res.status(500).json({ 
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+});
+
+// Admin endpoint - Approve business
+app.post('/api/admin/businesses/:id/approve', authenticateAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // First check if business has description and category set
+    const checkResult = await pool.query(
+      'SELECT id, name, description, category FROM businesses WHERE id = $1',
+      [id]
+    );
+    
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Business record not found. It may have been removed.' });
+    }
+
+    const business = checkResult.rows[0];
+    
+    // Validate that description and category are set
+    if (!business.description || !business.description.trim()) {
+      return res.status(400).json({ 
+        error: 'Business description is required before approval.' 
+      });
+    }
+    
+    if (!business.category || !business.category.trim()) {
+      return res.status(400).json({ 
+        error: 'Business category is required before approval.' 
+      });
+    }
+
+    // Now approve the business
+    const result = await pool.query(
+      'UPDATE businesses SET approved = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, name, approved',
+      [id]
+    );
+    
+    res.json({ message: `Business "${result.rows[0].name}" has been approved and is now visible on the platform.`, business: result.rows[0] });
+  } catch (error) {
+    console.error('Database error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Admin endpoint - Delete business (archive to reports table)
+app.delete('/api/admin/businesses/:id', authenticateAdmin, async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { id } = req.params;
+    const { reason } = req.body;
+    const adminUser = (req as any).user;
+
+    // Get business details before deletion
+    const businessResult = await client.query(
+      'SELECT id, name, category, description, category_color, logo_url, approved, created_at, updated_at FROM businesses WHERE id = $1',
+      [id]
+    );
+
+    if (businessResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Business not found' });
+    }
+
+    const business = businessResult.rows[0];
+
+    // Archive business to reports table
+    await client.query(
+      `INSERT INTO business_reports 
+       (original_business_id, name, category, description, category_color, logo_url, approved, deleted_at, deleted_by, deletion_reason, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8, $9, $10, $11)`,
+      [
+        business.id,
+        business.name,
+        business.category,
+        business.description,
+        business.category_color,
+        business.logo_url,
+        business.approved,
+        adminUser.userId,
+        reason || null,
+        business.created_at,
+        business.updated_at
+      ]
+    );
+
+    // Delete from businesses table (this will cascade delete waitlist entries)
+    await client.query('DELETE FROM businesses WHERE id = $1', [id]);
+
+    await client.query('COMMIT');
+    res.json({ 
+      message: `Business "${business.name}" has been deleted and archived to reports.`,
+      archived: true
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Delete business error:', error);
+    res.status(500).json({ 
+      error: 'Failed to delete business',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  } finally {
+    client.release();
   }
 });
 
@@ -192,7 +395,7 @@ app.post('/api/admin/businesses/:id/reject', authenticateAdmin, async (req: Requ
     
     if (businessResult.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'We couldn\'t find the business you\'re trying to reject. It may have already been removed.' });
+      return res.status(404).json({ error: 'Business record not found. It may have been removed.' });
     }
     
     const business = businessResult.rows[0];
@@ -242,14 +445,14 @@ app.post('/api/admin/businesses/:id/reject', authenticateAdmin, async (req: Requ
     
     await client.query('COMMIT');
     res.json({ 
-      message: `The business registration for "${business.name}" has been rejected and removed from the system. The associated user account and documents have also been deleted.`,
+      message: `Business registration "${business.name}" has been rejected and removed. Associated user account and documents have been deleted.`,
       deletedBusinessId: id
     });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Database error:', error);
     res.status(500).json({ 
-      error: 'We encountered an issue while processing the rejection. Please try again in a moment.',
+      error: 'An error occurred while processing the rejection.',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   } finally {

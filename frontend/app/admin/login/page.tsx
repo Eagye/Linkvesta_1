@@ -15,22 +15,54 @@ export default function AdminLoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('handleSubmit called', { email: formData.email, password: formData.password ? '***' : 'empty' });
+    
+    if (!formData.email || !formData.password) {
+      setError('Please enter both email and password.');
+      return;
+    }
+    
     setError('');
     setLoading(true);
 
     try {
+      console.log('Calling authService.adminLogin...');
       const response = await authService.adminLogin(formData.email, formData.password);
+      console.log('Login response:', response);
       
       // Store auth token if provided
       if (response.token) {
         localStorage.setItem('admin_token', response.token);
+        localStorage.setItem('admin_user', JSON.stringify(response.user));
+        console.log('Token stored in localStorage');
       }
 
-      // Redirect to admin dashboard (to be created later)
+      // Redirect to admin dashboard
+      console.log('Redirecting to dashboard...');
       router.push('/admin/dashboard');
     } catch (err: any) {
-      // Always use generic error message to prevent information disclosure
-      setError('Invalid email or password. Please check your credentials and try again.');
+      console.error('Admin login error:', err);
+      console.error('Error details:', {
+        message: err?.message,
+        response: err?.response?.data,
+        status: err?.response?.status
+      });
+      
+      // Check if it's an axios error with response data
+      if (err?.response?.data?.error) {
+        setError(err.response.data.error);
+      } else if (err?.message) {
+        // Check for network errors
+        if (err.message.includes('Network Error') || err.message.includes('Failed to fetch')) {
+          setError('Unable to connect to the server. Please check if the auth service is running.');
+        } else {
+          setError('Invalid email or password. Please check your credentials and try again.');
+        }
+      } else {
+        setError('Invalid email or password. Please check your credentials and try again.');
+      }
       setLoading(false);
     }
   };
@@ -125,7 +157,15 @@ export default function AdminLoginPage() {
         )}
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit}>
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSubmit(e);
+          }} 
+          action="javascript:void(0)" 
+          method="post"
+        >
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{
               display: 'block',
@@ -207,8 +247,22 @@ export default function AdminLoginPage() {
           </div>
 
           <button
-            type="submit"
+            type="button"
             disabled={loading}
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              
+              console.log('=== LOGIN BUTTON CLICKED ===');
+              console.log('Form data:', { email: formData.email, hasPassword: !!formData.password });
+              
+              if (!formData.email || !formData.password) {
+                setError('Please enter both email and password.');
+                return;
+              }
+              
+              await handleSubmit(e as any);
+            }}
             style={{
               width: '100%',
               padding: '0.875rem',

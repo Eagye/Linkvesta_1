@@ -32,20 +32,55 @@ export default function BrowsePage() {
 
   const fetchBusinesses = async () => {
     try {
+      setLoading(true);
+      // Use Next.js rewrite path first, fallback to direct API URL
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await axios.get(`${apiUrl}/api/businesses`, {
-        timeout: 5000, // 5 second timeout
-        validateStatus: (status) => status < 500 // Don't throw on 4xx errors
-      });
+      // Try using Next.js API rewrite first
+      let url = '/api/businesses';
+      
+      console.log('Fetching businesses from:', url, 'or', `${apiUrl}/api/businesses`);
+      
+      let response;
+      try {
+        // Try Next.js rewrite first
+        response = await axios.get(url, {
+          timeout: 30000,
+          validateStatus: (status) => status < 500,
+        });
+      } catch (rewriteError: any) {
+        console.log('Next.js rewrite failed, trying direct API:', rewriteError.message);
+        // Fallback to direct API call
+        url = `${apiUrl}/api/businesses`;
+        response = await axios.get(url, {
+          timeout: 30000,
+          validateStatus: (status) => status < 500,
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+      }
+      
+      console.log('Businesses API response:', response.status, response.data);
       
       if (response.data && Array.isArray(response.data)) {
+        console.log(`Loaded ${response.data.length} businesses`);
         setBusinesses(response.data);
       } else {
+        console.error('Invalid response format:', response.data);
         throw new Error('Invalid response format');
       }
     } catch (error: any) {
       console.error('Error fetching businesses:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        code: error?.code,
+        response: error?.response?.data,
+        status: error?.response?.status,
+        url: error?.config?.url
+      });
+      
       // Fallback to default businesses if API fails
+      console.log('Using fallback businesses');
       setBusinesses([
         {
           id: 1,
@@ -157,12 +192,12 @@ export default function BrowsePage() {
     <main style={{
       minHeight: 'calc(100vh - 200px)',
       backgroundColor: 'var(--linkvesta-white)',
-      padding: '3rem 2rem'
+      padding: 'clamp(1.5rem, 4vw, 3rem) clamp(1rem, 3vw, 2rem)'
     }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
         <h1 style={{
           color: 'var(--linkvesta-dark-blue)',
-          fontSize: '2.5rem',
+          fontSize: 'clamp(1.75rem, 5vw, 2.5rem)',
           marginBottom: '1rem',
           fontWeight: 'bold'
         }}>
@@ -170,7 +205,7 @@ export default function BrowsePage() {
         </h1>
         <p style={{
           color: 'var(--linkvesta-dark-blue)',
-          fontSize: '1.125rem',
+          fontSize: 'clamp(1rem, 2.5vw, 1.125rem)',
           marginBottom: '2rem',
           opacity: 0.8
         }}>
@@ -219,8 +254,8 @@ export default function BrowsePage() {
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-            gap: '2rem'
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
+            gap: 'clamp(1rem, 3vw, 2rem)'
           }}>
             {filteredBusinesses.map((business) => (
               <div
@@ -347,10 +382,12 @@ export default function BrowsePage() {
           <div
             style={{
               backgroundColor: 'var(--linkvesta-white)',
-              padding: '2rem',
+              padding: 'clamp(1.5rem, 4vw, 2rem)',
               borderRadius: '8px',
               maxWidth: '500px',
               width: '90%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
               gap: '1.5rem'

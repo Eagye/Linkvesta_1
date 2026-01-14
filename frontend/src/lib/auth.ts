@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { getAuthUrl } from './config';
 
-const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:3002';
+const AUTH_URL = getAuthUrl();
 
 export const authClient = axios.create({
   baseURL: AUTH_URL,

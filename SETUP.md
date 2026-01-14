@@ -40,6 +40,18 @@ AWS_S3_BUCKET_NAME=linkvesta-storage
 # Generate a secure secret: openssl rand -base64 32
 JWT_SECRET=your_super_secret_jwt_key_change_in_production
 JWT_EXPIRES_IN=7d
+
+# Email Configuration (Required for email verification)
+# For Gmail: Enable 2FA and generate app password at https://myaccount.google.com/apppasswords
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password_here
+FRONTEND_URL=http://localhost:3000
+
+# For custom SMTP (production):
+# SMTP_HOST=smtp.example.com
+# SMTP_PORT=587
+# SMTP_SECURE=false
+# SMTP_FROM=noreply@linkvesta.com
 ```
 
 ### 2. Install Dependencies
