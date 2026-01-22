@@ -62,7 +62,7 @@ export default function NotFound() {
           lineHeight: '1.6',
           marginBottom: '2rem'
         }}>
-          The page you're looking for doesn't exist or has been moved.
+          The page you&apos;re looking for doesn&apos;t exist or has been moved.
         </p>
 
         <div style={{

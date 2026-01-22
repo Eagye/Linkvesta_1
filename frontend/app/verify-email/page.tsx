@@ -309,14 +309,14 @@ function VerifyEmailContent() {
                     marginBottom: '0.5rem',
                     fontWeight: '600'
                   }}>
-                    Can't access the link?
+                    Can&apos;t access the link?
                   </p>
                   <p style={{
                     color: '#78350f',
                     fontSize: '0.875rem',
                     margin: 0
                   }}>
-                    If the verification link doesn't work, make sure:
+                    If the verification link doesn&apos;t work, make sure:
                   </p>
                   <ul style={{
                     color: '#78350f',
@@ -325,7 +325,7 @@ function VerifyEmailContent() {
                     padding: 0
                   }}>
                     <li>The application is running on your computer</li>
-                    <li>You're accessing from the same device where the app is running</li>
+                    <li>You&apos;re accessing from the same device where the app is running</li>
                     <li>Or use the manual verification option below</li>
                   </ul>
                 </div>
@@ -426,7 +426,7 @@ function VerifyEmailContent() {
                   fontSize: '0.875rem',
                   marginBottom: '1rem'
                 }}>
-                  Copy the verification token from your email link (the part after "token=") and paste it below:
+                  Copy the verification token from your email link (the part after &quot;token=&quot;) and paste it below:
                 </p>
                 <div style={{
                   display: 'flex',

@@ -35,6 +35,7 @@ services:
       DB_NAME: ${POSTGRES_DB:-linkvesta}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_here}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -42,9 +43,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./backend/services/api:/app
-      - /app/node_modules
 
   # Auth Service
   auth-service:
@@ -74,9 +72,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./backend/services/auth:/app
-      - /app/node_modules
 
   # Frontend (Next.js)
   frontend:
@@ -95,10 +90,6 @@ services:
     depends_on:
       - api-service
       - auth-service
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
 
 volumes:
   postgres_data:

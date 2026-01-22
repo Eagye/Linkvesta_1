@@ -32,6 +32,7 @@ const JWT_SECRET: string | undefined = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is required and must be set in the environment.');
 }
+const JWT_SECRET_VALUE: string = JWT_SECRET;
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d';
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'lv_auth';
 const AUTH_COOKIE_MAX_AGE_MS = Number(process.env.AUTH_COOKIE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000);
@@ -133,12 +134,14 @@ app.get('/api/auth', (req: Request, res: Response) => {
   res.json({ message: 'LinkVesta Auth Service' });
 });
 
+type AuthTokenPayload = { userId: number; email: string; role: string };
+
 // Helper function to generate JWT token
 function generateToken(userId: number, email: string, role: string): string {
   // @ts-ignore - TypeScript strict mode issue with jsonwebtoken types
   return jwt.sign(
     { userId, email, role },
-    JWT_SECRET,
+    JWT_SECRET_VALUE,
     { expiresIn: JWT_EXPIRES_IN }
   );
 }
@@ -255,6 +258,18 @@ async function resetFailedLoginAttempts(userId: number, ipAddress: string | unde
   );
 }
 
+function parseAuthToken(token: string): AuthTokenPayload {
+  const decoded = jwt.verify(token, JWT_SECRET_VALUE);
+  if (typeof decoded !== 'object' || decoded === null) {
+    throw new Error('Invalid token payload');
+  }
+  const { userId, email, role } = decoded as Partial<AuthTokenPayload>;
+  if (typeof userId !== 'number' || typeof email !== 'string' || typeof role !== 'string') {
+    throw new Error('Invalid token payload');
+  }
+  return { userId, email, role };
+}
+
 // Middleware to verify JWT token and check admin role
 function authenticateAdmin(req: Request, res: Response, next: Function) {
   try {
@@ -263,7 +278,7 @@ function authenticateAdmin(req: Request, res: Response, next: Function) {
       return res.status(401).json({ error: 'Authorization token required' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; email: string; role: string };
+    const decoded = parseAuthToken(token);
 
     if (decoded.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
@@ -876,7 +891,7 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Token is required' });
     }
 
-    const decoded = jwt.verify(requestToken, JWT_SECRET) as { userId: number; email: string; role: string };
+    const decoded = parseAuthToken(requestToken);
 
     // Get fresh user data
     const result = await pool.query(

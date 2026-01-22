@@ -1263,7 +1263,7 @@ function RegisterFormContent() {
                           <circle cx="11" cy="11" r="8"></circle>
                           <path d="m21 21-4.35-4.35"></path>
                         </svg>
-                        <p>No countries found matching "{countrySearch}"</p>
+                        <p>No countries found matching &quot;{countrySearch}&quot;</p>
                         <p style={{ fontSize: '0.75rem', marginTop: '0.25rem', opacity: 0.7 }}>
                           Try a different search term
                         </p>

@@ -16,6 +16,7 @@ const JWT_SECRET: string | undefined = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is required and must be set in the environment.');
 }
+const JWT_SECRET_VALUE: string = JWT_SECRET;
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'lv_auth';
 
 const app = express();
@@ -181,6 +182,20 @@ app.get('/api/businesses/:id', async (req: Request, res: Response) => {
   }
 });
 
+type AuthTokenPayload = { userId: number; email: string; role: string };
+
+function parseAuthToken(token: string): AuthTokenPayload {
+  const decoded = jwt.verify(token, JWT_SECRET_VALUE);
+  if (typeof decoded !== 'object' || decoded === null) {
+    throw new Error('Invalid token payload');
+  }
+  const { userId, email, role } = decoded as Partial<AuthTokenPayload>;
+  if (typeof userId !== 'number' || typeof email !== 'string' || typeof role !== 'string') {
+    throw new Error('Invalid token payload');
+  }
+  return { userId, email, role };
+}
+
 // Middleware to verify admin JWT token
 function authenticateAdmin(req: Request, res: Response, next: Function) {
   try {
@@ -195,7 +210,7 @@ function authenticateAdmin(req: Request, res: Response, next: Function) {
       return res.status(401).json({ error: 'Authorization token required' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; email: string; role: string };
+    const decoded = parseAuthToken(token);
 
     if (decoded.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
