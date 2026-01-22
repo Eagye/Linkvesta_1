@@ -12,6 +12,7 @@ export default function AdminLoginPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,12 +33,7 @@ export default function AdminLoginPage() {
       const response = await authService.adminLogin(formData.email, formData.password);
       console.log('Login response:', response);
       
-      // Store auth token if provided
-      if (response.token) {
-        localStorage.setItem('admin_token', response.token);
-        localStorage.setItem('admin_user', JSON.stringify(response.user));
-        console.log('Token stored in localStorage');
-      }
+      // Auth cookie is set by the server; no local storage needed.
 
       // Redirect to admin dashboard
       console.log('Redirecting to dashboard...');
@@ -216,34 +212,60 @@ export default function AdminLoginPage() {
             }}>
               Password
             </label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              style={{
-                width: '100%',
-                padding: '0.875rem 1rem',
-                border: '2px solid #e5e7eb',
-                borderRadius: '8px',
-                fontSize: '1rem',
-                color: 'var(--linkvesta-dark-blue)',
-                boxSizing: 'border-box',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                backgroundColor: '#ffffff'
-              }}
-              placeholder="Enter your password"
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
-                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(26, 35, 50, 0.1)';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = '#e5e7eb';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                style={{
+                  width: '100%',
+                  padding: '0.875rem 3.25rem 0.875rem 1rem',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  color: 'var(--linkvesta-dark-blue)',
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                  backgroundColor: '#ffffff'
+                }}
+                placeholder="Enter your password"
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(26, 35, 50, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute',
+                  right: '0.5rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--linkvesta-dark-blue)',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <button

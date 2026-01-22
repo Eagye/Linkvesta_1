@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import fs from 'fs';
@@ -11,10 +12,14 @@ import { storageService } from './services/storage';
 
 dotenv.config();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
+const JWT_SECRET: string | undefined = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required and must be set in the environment.');
+}
+const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'lv_auth';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.API_PORT || 3001);
 
 // Trust proxy for accurate IP detection (important for rate limiting behind load balancers)
 if (process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production') {
@@ -66,6 +71,9 @@ app.use(cors({
 // Body parsing with size limits
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Parse cookies for auth/session handling
+app.use(cookieParser());
 
 // General rate limiting
 const generalLimiter = rateLimit({
@@ -177,11 +185,16 @@ app.get('/api/businesses/:id', async (req: Request, res: Response) => {
 function authenticateAdmin(req: Request, res: Response, next: Function) {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const tokenFromHeader = authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.substring(7)
+      : null;
+    const tokenFromCookie = (req as any).cookies?.[AUTH_COOKIE_NAME] || null;
+    const token = tokenFromHeader || tokenFromCookie;
+
+    if (!token) {
       return res.status(401).json({ error: 'Authorization token required' });
     }
 
-    const token = authHeader.substring(7);
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; email: string; role: string };
 
     if (decoded.role !== 'admin') {
@@ -198,12 +211,16 @@ function authenticateAdmin(req: Request, res: Response, next: Function) {
   }
 }
 
+const fetchAllBusinesses = async () => {
+  return pool.query(
+    'SELECT id, name, category, description, category_color as "categoryColor", logo_url as "logoUrl", approved, created_at as "createdAt" FROM businesses ORDER BY created_at DESC'
+  );
+};
+
 // Admin endpoints - Get all businesses (including unapproved)
 app.get('/api/admin/businesses', authenticateAdmin, async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      'SELECT id, name, category, description, category_color as "categoryColor", logo_url as "logoUrl", approved, created_at as "createdAt" FROM businesses ORDER BY created_at DESC'
-    );
+    const result = await fetchAllBusinesses();
     res.json(result.rows);
   } catch (error) {
     console.error('Database error:', error);
@@ -214,16 +231,27 @@ app.get('/api/admin/businesses', authenticateAdmin, async (req: Request, res: Re
   }
 });
 
-// Admin endpoint - Update business details (description and category)
+// Admin endpoints - Get all businesses (explicit)
+app.get('/api/admin/businesses/all', authenticateAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await fetchAllBusinesses();
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Database error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Admin endpoint - Update business details (category required; description optional)
 app.put('/api/admin/businesses/:id', authenticateAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { description, category } = req.body;
 
     // Validation
-    if (!description || !description.trim()) {
-      return res.status(400).json({ error: 'Business description is required before approval.' });
-    }
     if (!category || !category.trim()) {
       return res.status(400).json({ error: 'Business category is required before approval.' });
     }
@@ -247,12 +275,13 @@ app.put('/api/admin/businesses/:id', authenticateAdmin, async (req: Request, res
 
     const categoryColor = categoryColors[category] || '#6b7280';
 
+    const normalizedDescription = typeof description === 'string' ? description.trim() : null;
     const result = await pool.query(
       `UPDATE businesses 
        SET description = $1, category = $2, category_color = $3, updated_at = CURRENT_TIMESTAMP 
        WHERE id = $4 
        RETURNING id, name, category, description, category_color as "categoryColor", approved`,
-      [description.trim(), category, categoryColor, id]
+      [normalizedDescription || null, category, categoryColor, id]
     );
 
     if (result.rows.length === 0) {
@@ -289,16 +318,53 @@ app.post('/api/admin/businesses/:id/approve', authenticateAdmin, async (req: Req
 
     const business = checkResult.rows[0];
     
-    // Validate that description and category are set
-    if (!business.description || !business.description.trim()) {
-      return res.status(400).json({ 
-        error: 'Business description is required before approval.' 
-      });
-    }
-    
+    // Validate that category is set
     if (!business.category || !business.category.trim()) {
       return res.status(400).json({ 
         error: 'Business category is required before approval.' 
+      });
+    }
+
+    // Verify associated user's email is verified before approval
+    let associatedUser = null;
+    let submittedEmail = null;
+
+    if (business.description) {
+      const emailMatch = business.description.match(/submitted by\s+([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
+      if (emailMatch && emailMatch[1]) {
+        submittedEmail = emailMatch[1].toLowerCase().trim();
+      }
+    }
+
+    if (submittedEmail) {
+      const userResult = await pool.query(
+        'SELECT id, email_verified FROM users WHERE email = $1 AND account_type = $2',
+        [submittedEmail, 'startup']
+      );
+      if (userResult.rows.length > 0) {
+        associatedUser = userResult.rows[0];
+      }
+    }
+
+    if (!associatedUser) {
+      const userByNameResult = await pool.query(
+        'SELECT id, email_verified FROM users WHERE account_type = $1 AND LOWER(name) = LOWER($2) ORDER BY created_at DESC LIMIT 1',
+        ['startup', business.name]
+      );
+      if (userByNameResult.rows.length > 0) {
+        associatedUser = userByNameResult.rows[0];
+      }
+    }
+
+    if (!associatedUser) {
+      return res.status(400).json({
+        error: 'Unable to verify email for this business. Please ensure the owner email is verified before approval.'
+      });
+    }
+
+    if (!associatedUser.email_verified) {
+      return res.status(400).json({
+        error: 'Business owner email must be verified before approval.'
       });
     }
 
@@ -473,6 +539,7 @@ app.get('/api/admin/users', authenticateAdmin, async (req: Request, res: Respons
         COALESCE(account_type, '') as "accountType", 
         COALESCE(tin, '') as "tin",
         COALESCE(business_registration_document, '') as "businessRegistrationDocument",
+        email_verified as "emailVerified",
         role, 
         created_at as "createdAt"
        FROM users 

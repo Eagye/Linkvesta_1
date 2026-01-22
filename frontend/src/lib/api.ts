@@ -8,6 +8,7 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 // API Service methods
@@ -57,92 +58,91 @@ export const apiService = {
     return response.data;
   },
 
-  // Admin methods (require authentication token)
-  async getAllBusinesses(token: string) {
-    const response = await apiClient.get('/api/admin/businesses', {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+  // Admin methods (prefer cookie auth; token optional for legacy usage)
+  async getAllBusinesses(token?: string) {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await apiClient.get('/api/admin/businesses/all', { headers });
     return response.data;
   },
 
-  async updateBusiness(id: number, description: string, category: string, token: string) {
+  async updateBusiness(id: number, description: string, category: string, token?: string) {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await apiClient.put(`/api/admin/businesses/${id}`, {
       description,
       category
     }, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers,
     });
     return response.data;
   },
 
-  async approveBusiness(id: number, token: string) {
+  async approveBusiness(id: number, token?: string) {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await apiClient.post(`/api/admin/businesses/${id}/approve`, {}, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers,
     });
     return response.data;
   },
 
-  async rejectBusiness(id: number, token: string) {
+  async rejectBusiness(id: number, token?: string) {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await apiClient.post(`/api/admin/businesses/${id}/reject`, {}, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers,
     });
     return response.data;
   },
 
-  async deleteBusiness(id: number, reason: string, token: string) {
+  async deleteBusiness(id: number, reason: string, token?: string) {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await apiClient.delete(`/api/admin/businesses/${id}`, {
       data: { reason },
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers,
     });
     return response.data;
   },
 
-  async getAllUsers(token: string) {
-    const response = await apiClient.get('/api/admin/users', {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+  async getAllUsers(token?: string) {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const response = await apiClient.get('/api/admin/users', { headers });
     return response.data;
   },
 
   // Investor management methods (require authentication token)
-  async getAllInvestors(token: string) {
+  async getAllInvestors(token?: string) {
     const authUrl = getAuthUrl();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await axios.get(`${authUrl}/api/auth/investors`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers,
+      withCredentials: true,
     });
     return response.data.investors || [];
   },
 
-  async approveInvestor(id: number, token: string) {
+  async approveInvestor(id: number, token?: string) {
     const authUrl = getAuthUrl();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await axios.post(`${authUrl}/api/auth/investors/${id}/approve`, {}, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers,
+      withCredentials: true,
     });
     return response.data;
   },
 
-  async rejectInvestor(id: number, reason: string, token: string) {
+  async rejectInvestor(id: number, reason: string, token?: string) {
     const authUrl = getAuthUrl();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
     const response = await axios.post(`${authUrl}/api/auth/investors/${id}/reject`, { reason }, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers,
+      withCredentials: true,
     });
     return response.data;
   },

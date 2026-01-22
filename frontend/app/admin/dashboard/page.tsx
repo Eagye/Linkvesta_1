@@ -27,6 +27,7 @@ interface User {
   accountType?: string;
   tin?: string;
   businessRegistrationDocument?: string;
+  emailVerified: boolean;
   role: string;
   createdAt: string;
 }
@@ -64,6 +65,8 @@ export default function AdminDashboardPage() {
     password: '',
     confirmPassword: ''
   });
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [showAdminConfirmPassword, setShowAdminConfirmPassword] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserDetails, setShowUserDetails] = useState(false);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
@@ -92,14 +95,7 @@ export default function AdminDashboardPage() {
   const [wizardCategory, setWizardCategory] = useState('Other');
 
   useEffect(() => {
-    // Check if user is authenticated
-    const token = localStorage.getItem('admin_token');
-    if (!token) {
-      router.push('/admin/login');
-      return;
-    }
-
-    // Load user info and businesses
+    // Load user info and businesses; auth handled via httpOnly cookie
     loadDashboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -122,21 +118,17 @@ export default function AdminDashboardPage() {
   const loadDashboard = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        router.push('/admin/login');
-        return;
-      }
       
       // Load businesses and users separately to handle errors gracefully
       const errors: string[] = [];
       
       try {
-        console.log('Fetching businesses with token:', token ? 'Token present' : 'No token');
-        const businessesData = await apiService.getAllBusinesses(token);
+        console.log('Fetching businesses with cookie-based auth');
+        const businessesData = await apiService.getAllBusinesses();
         console.log('Businesses data received:', businessesData);
         setBusinesses(businessesData || []);
       } catch (err: any) {
+        if (handleAuthFailure(err)) return;
         console.error('Error loading businesses:', err);
         console.error('Error response:', err.response?.data);
         console.error('Error status:', err.response?.status);
@@ -146,7 +138,7 @@ export default function AdminDashboardPage() {
       }
 
       try {
-        const usersData = await apiService.getAllUsers(token);
+        const usersData = await apiService.getAllUsers();
         // Filter out empty strings and convert to undefined for optional fields
         const processedUsers = usersData.map((user: any) => ({
           ...user,
@@ -154,9 +146,11 @@ export default function AdminDashboardPage() {
           country: user.country && user.country.trim() ? user.country : undefined,
           tin: user.tin && user.tin.trim() ? user.tin : undefined,
           businessRegistrationDocument: user.businessRegistrationDocument && user.businessRegistrationDocument.trim() ? user.businessRegistrationDocument : undefined,
+          emailVerified: Boolean(user.emailVerified),
         }));
         setUsers(processedUsers);
       } catch (err: any) {
+        if (handleAuthFailure(err)) return;
         console.error('Error loading users:', err);
         const errorMsg = err.response?.data?.error || err.message || 'Unknown error';
         errors.push(`Users: ${errorMsg}`);
@@ -164,9 +158,10 @@ export default function AdminDashboardPage() {
       }
 
       try {
-        const investorsData = await apiService.getAllInvestors(token);
+        const investorsData = await apiService.getAllInvestors();
         setInvestors(investorsData || []);
       } catch (err: any) {
+        if (handleAuthFailure(err)) return;
         console.error('Error loading investors:', err);
         const errorMsg = err.response?.data?.error || err.message || 'Unknown error';
         errors.push(`Investors: ${errorMsg}`);
@@ -198,30 +193,84 @@ export default function AdminDashboardPage() {
     }
   };
 
+  function handleAuthFailure(err: any) {
+    const status = err?.response?.status;
+    if (status === 401 || status === 403) {
+      router.push('/admin/login');
+      return true;
+    }
+    return false;
+  }
+
+  const findAssociatedUserForBusiness = (business: Business) => {
+    let associatedUser = null as User | null;
+
+    if (business.description) {
+      const emailMatch = business.description.match(/submitted by\s+([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
+      if (emailMatch && emailMatch[1]) {
+        const email = emailMatch[1].toLowerCase().trim();
+        associatedUser = users.find(u =>
+          u.accountType === 'startup' &&
+          u.email?.toLowerCase().trim() === email
+        ) || null;
+      }
+    }
+
+    if (!associatedUser) {
+      associatedUser = users.find(u =>
+        u.accountType === 'startup' &&
+        u.name?.toLowerCase().trim() === business.name?.toLowerCase().trim()
+      ) || null;
+    }
+
+    return associatedUser;
+  };
+
+  const getBusinessEmailVerification = (business: Business) => {
+    const associatedUser = findAssociatedUserForBusiness(business);
+
+    if (!associatedUser) {
+      return {
+        verified: false,
+        label: '⚠ Email Unknown',
+        color: '#f59e0b'
+      };
+    }
+
+    if (associatedUser.emailVerified) {
+      return {
+        verified: true,
+        label: '✓ Email Verified',
+        color: '#10b981'
+      };
+    }
+
+    return {
+      verified: false,
+      label: '✗ Email Not Verified',
+      color: '#ef4444'
+    };
+  };
+
+  const selectedBusinessVerification = selectedBusinessForWizard
+    ? getBusinessEmailVerification(selectedBusinessForWizard)
+    : null;
+  const canApproveSelectedBusiness = Boolean(selectedBusinessVerification?.verified);
+
   const handleUpdateBusiness = async (businessId: number) => {
     try {
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        router.push('/admin/login');
-        return;
-      }
-
-      if (!editBusinessForm.description.trim()) {
-        logAction('Business description is required', 'error');
-        return;
-      }
-
       if (!editBusinessForm.category || editBusinessForm.category === 'Other') {
         logAction('Business category must be selected', 'error');
         return;
       }
 
-      await apiService.updateBusiness(businessId, editBusinessForm.description.trim(), editBusinessForm.category, token);
+      await apiService.updateBusiness(businessId, editBusinessForm.description.trim(), editBusinessForm.category);
       logAction(`Business details updated for business ID ${businessId}`, 'success');
       setEditingBusiness(null);
       setEditBusinessForm({ description: '', category: 'Other' });
       await loadDashboard();
     } catch (err: any) {
+      if (handleAuthFailure(err)) return;
       console.error('[Business Update] Error:', err);
       logAction(`Failed to update business: ${err.response?.data?.error || 'Unknown error'}`, 'error');
     }
@@ -229,16 +278,12 @@ export default function AdminDashboardPage() {
 
   const handleApproveBusiness = async (businessId: number) => {
     try {
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        router.push('/admin/login');
-        return;
-      }
-      const response = await apiService.approveBusiness(businessId, token);
+      await apiService.approveBusiness(businessId);
       logAction(`Business ID ${businessId} approved successfully`, 'success');
       await loadDashboard();
       setError('');
     } catch (err: any) {
+      if (handleAuthFailure(err)) return;
       console.error('[Business Approval] Error:', err);
       logAction(`Business approval failed: ${err.response?.data?.error || 'Unknown error'}`, 'error');
       setError('');
@@ -266,19 +311,14 @@ export default function AdminDashboardPage() {
     if (!businessToDelete) return;
     
     try {
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        router.push('/admin/login');
-        return;
-      }
-      
-      await apiService.deleteBusiness(businessToDelete.id, deleteReason, token);
+      await apiService.deleteBusiness(businessToDelete.id, deleteReason);
       logAction(`Business ID ${businessToDelete.id} (${businessToDelete.name}) deleted and archived`, 'success');
       setShowDeleteConfirm(false);
       setBusinessToDelete(null);
       setDeleteReason('');
       await loadDashboard();
     } catch (err: any) {
+      if (handleAuthFailure(err)) return;
       console.error('[Business Deletion] Error:', err);
       logAction(`Business deletion failed: ${err.response?.data?.error || 'Unknown error'}`, 'error');
     }
@@ -286,16 +326,12 @@ export default function AdminDashboardPage() {
 
   const handleApproveInvestor = async (investorId: number) => {
     try {
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        router.push('/admin/login');
-        return;
-      }
-      await apiService.approveInvestor(investorId, token);
+      await apiService.approveInvestor(investorId);
       logAction(`Investor ID ${investorId} approved successfully`, 'success');
       await loadDashboard();
       setError('');
     } catch (err: any) {
+      if (handleAuthFailure(err)) return;
       console.error('[Investor Approval] Error:', err);
       logAction(`Investor approval failed: ${err.response?.data?.error || 'Unknown error'}`, 'error');
       setError('');
@@ -315,12 +351,7 @@ export default function AdminDashboardPage() {
     if (!investorToReject) return;
     
     try {
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        router.push('/admin/login');
-        return;
-      }
-      await apiService.rejectInvestor(investorToReject.id, rejectionReason || 'Account rejected by administrator', token);
+      await apiService.rejectInvestor(investorToReject.id, rejectionReason || 'Account rejected by administrator');
       logAction(`Investor ID ${investorToReject.id} rejected`, 'success');
       setShowInvestorRejectConfirm(false);
       setInvestorToReject(null);
@@ -328,6 +359,7 @@ export default function AdminDashboardPage() {
       await loadDashboard();
       setError('');
     } catch (err: any) {
+      if (handleAuthFailure(err)) return;
       console.error('[Investor Rejection] Error:', err);
       logAction(`Investor rejection failed: ${err.response?.data?.error || 'Unknown error'}`, 'error');
       setError('');
@@ -340,17 +372,13 @@ export default function AdminDashboardPage() {
     setShowRejectConfirm(false);
     
     try {
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        router.push('/admin/login');
-        return;
-      }
-      await apiService.rejectBusiness(businessToReject.id, token);
+      await apiService.rejectBusiness(businessToReject.id);
       logAction(`Business ID ${businessToReject.id} rejected and removed`, 'success');
       await loadDashboard();
       setError('');
       setBusinessToReject(null);
     } catch (err: any) {
+      if (handleAuthFailure(err)) return;
       console.error('[Business Rejection] Error:', err);
       logAction(`Business rejection failed: ${err.response?.data?.error || 'Unknown error'}`, 'error');
       setError('');
@@ -358,10 +386,15 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_token');
-    router.push('/admin/login');
-    router.refresh();
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (err) {
+      console.warn('Logout failed, clearing session locally.');
+    } finally {
+      router.push('/admin/login');
+      router.refresh();
+    }
   };
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
@@ -381,17 +414,10 @@ export default function AdminDashboardPage() {
 
     setCreateAdminLoading(true);
     try {
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        router.push('/admin/login');
-        return;
-      }
-
       await authService.createAdmin(
         adminForm.email,
         adminForm.password,
-        adminForm.name || undefined,
-        token
+        adminForm.name || undefined
       );
 
       setCreateAdminSuccess('Admin account created successfully!');
@@ -401,6 +427,7 @@ export default function AdminDashboardPage() {
         setCreateAdminSuccess('');
       }, 2000);
     } catch (err: any) {
+      if (handleAuthFailure(err)) return;
       setCreateAdminError(err.response?.data?.error || 'Failed to create admin account');
     } finally {
       setCreateAdminLoading(false);
@@ -1185,7 +1212,7 @@ export default function AdminDashboardPage() {
               lineHeight: '1.6',
               marginBottom: '1.5rem'
             }}>
-              Update the description and category for <strong style={{ color: 'var(--linkvesta-dark-blue)' }}>&quot;{editingBusiness.name}&quot;</strong>. These fields are required before approval.
+              Update the description and category for <strong style={{ color: 'var(--linkvesta-dark-blue)' }}>&quot;{editingBusiness.name}&quot;</strong>. Description is optional.
             </p>
 
             <div style={{ marginBottom: '1.5rem' }}>
@@ -1239,7 +1266,7 @@ export default function AdminDashboardPage() {
                 color: 'var(--linkvesta-dark-blue)',
                 marginBottom: '0.5rem'
               }}>
-                Business Description <span style={{ color: '#ef4444' }}>*</span>
+                Business Description <span style={{ color: '#6b7280' }}>(optional)</span>
               </label>
               <textarea
                 value={editBusinessForm.description}
@@ -1518,7 +1545,7 @@ export default function AdminDashboardPage() {
                       marginBottom: '0.5rem',
                       display: 'block'
                     }}>
-                      Description <span style={{ color: '#ef4444' }}>*</span>
+                      Description <span style={{ color: '#6b7280' }}>(optional)</span>
                     </label>
                     <textarea
                       value={wizardDescription}
@@ -1604,33 +1631,33 @@ export default function AdminDashboardPage() {
                   </button>
                   <button
                     onClick={() => {
-                      if (wizardDescription.trim() && wizardCategory) {
+                      if (wizardCategory) {
                         setWizardStep(2);
                       }
                     }}
-                    disabled={!wizardDescription.trim() || !wizardCategory}
+                    disabled={!wizardCategory}
                     style={{
                       padding: '0.75rem 2rem',
-                      backgroundColor: (wizardDescription.trim() && wizardCategory) ? 'var(--linkvesta-dark-blue)' : '#9ca3af',
+                      backgroundColor: wizardCategory ? 'var(--linkvesta-dark-blue)' : '#9ca3af',
                       color: 'white',
                       border: 'none',
                       borderRadius: '8px',
                       fontSize: '0.875rem',
                       fontWeight: '600',
-                      cursor: (wizardDescription.trim() && wizardCategory) ? 'pointer' : 'not-allowed',
+                      cursor: wizardCategory ? 'pointer' : 'not-allowed',
                       transition: 'all 0.3s ease',
                       position: 'relative',
                       overflow: 'hidden',
-                      boxShadow: (wizardDescription.trim() && wizardCategory) ? '0 4px 6px rgba(0, 0, 0, 0.1)' : 'none'
+                      boxShadow: wizardCategory ? '0 4px 6px rgba(0, 0, 0, 0.1)' : 'none'
                     }}
                     onMouseEnter={(e) => {
-                      if (wizardDescription.trim() && wizardCategory) {
+                      if (wizardCategory) {
                         e.currentTarget.style.transform = 'translateX(5px)';
                         e.currentTarget.style.boxShadow = '0 6px 12px rgba(0, 0, 0, 0.15)';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (wizardDescription.trim() && wizardCategory) {
+                      if (wizardCategory) {
                         e.currentTarget.style.transform = 'translateX(0)';
                         e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
                       }
@@ -1719,6 +1746,45 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
+                {selectedBusinessVerification && (
+                  <div style={{
+                    marginBottom: '1.5rem',
+                    padding: '1rem 1.25rem',
+                    borderRadius: '10px',
+                    border: '1px solid #e5e7eb',
+                    backgroundColor: '#ffffff'
+                  }}>
+                    <p style={{
+                      margin: 0,
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      color: '#6b7280',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      Email Verification
+                    </p>
+                    <p style={{
+                      color: selectedBusinessVerification.color,
+                      fontSize: '0.95rem',
+                      fontWeight: '600',
+                      margin: '0.5rem 0 0 0'
+                    }}>
+                      {selectedBusinessVerification.label}
+                    </p>
+                    {!canApproveSelectedBusiness && (
+                      <p style={{
+                        margin: '0.5rem 0 0 0',
+                        fontSize: '0.8rem',
+                        color: '#b91c1c',
+                        fontWeight: '500'
+                      }}>
+                        Approval is disabled until the owner verifies their email.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -1750,20 +1816,17 @@ export default function AdminDashboardPage() {
                     <button
                       onClick={async () => {
                         try {
-                          const token = localStorage.getItem('admin_token');
-                          if (!token) {
-                            router.push('/admin/login');
+                          if (!canApproveSelectedBusiness) {
                             return;
                           }
-                          
+
                           // Update description and category if changed
                           if (wizardDescription.trim() !== (selectedBusinessForWizard.description || '') || 
                               wizardCategory !== selectedBusinessForWizard.category) {
                             await apiService.updateBusiness(
                               selectedBusinessForWizard.id,
                               wizardDescription.trim(),
-                              wizardCategory,
-                              token
+                              wizardCategory
                             );
                           }
                           
@@ -1775,6 +1838,7 @@ export default function AdminDashboardPage() {
                           setWizardDescription('');
                           setWizardCategory('Other');
                         } catch (err: any) {
+                          if (handleAuthFailure(err)) return;
                           console.error('Error rejecting business:', err);
                         }
                       }}
@@ -1803,20 +1867,13 @@ export default function AdminDashboardPage() {
                     <button
                       onClick={async () => {
                         try {
-                          const token = localStorage.getItem('admin_token');
-                          if (!token) {
-                            router.push('/admin/login');
-                            return;
-                          }
-                          
                           // Update description and category if changed
                           if (wizardDescription.trim() !== (selectedBusinessForWizard.description || '') || 
                               wizardCategory !== selectedBusinessForWizard.category) {
                             await apiService.updateBusiness(
                               selectedBusinessForWizard.id,
                               wizardDescription.trim(),
-                              wizardCategory,
-                              token
+                              wizardCategory
                             );
                           }
                           
@@ -1828,25 +1885,29 @@ export default function AdminDashboardPage() {
                           setWizardDescription('');
                           setWizardCategory('Other');
                         } catch (err: any) {
+                          if (handleAuthFailure(err)) return;
                           console.error('Error approving business:', err);
                         }
                       }}
                       style={{
                         padding: '0.75rem 2rem',
-                        backgroundColor: '#10b981',
+                        backgroundColor: canApproveSelectedBusiness ? '#10b981' : '#9ca3af',
                         color: 'white',
                         border: 'none',
                         borderRadius: '8px',
                         fontSize: '0.875rem',
                         fontWeight: '600',
-                        cursor: 'pointer',
+                        cursor: canApproveSelectedBusiness ? 'pointer' : 'not-allowed',
                         transition: 'all 0.2s'
                       }}
+                      disabled={!canApproveSelectedBusiness}
                       onMouseEnter={(e) => {
+                        if (!canApproveSelectedBusiness) return;
                         e.currentTarget.style.backgroundColor = '#059669';
                         e.currentTarget.style.transform = 'scale(1.05)';
                       }}
                       onMouseLeave={(e) => {
+                        if (!canApproveSelectedBusiness) return;
                         e.currentTarget.style.backgroundColor = '#10b981';
                         e.currentTarget.style.transform = 'scale(1)';
                       }}
@@ -2289,22 +2350,48 @@ export default function AdminDashboardPage() {
                   }}>
                     Password *
                   </label>
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    value={adminForm.password}
-                    onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '0.625rem',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem',
-                      boxSizing: 'border-box'
-                    }}
-                    placeholder="Min 8 characters"
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showAdminPassword ? 'text' : 'password'}
+                      required
+                      minLength={8}
+                      value={adminForm.password}
+                      onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '0.625rem 3.25rem 0.625rem 0.625rem',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '8px',
+                        fontSize: '0.9rem',
+                        boxSizing: 'border-box'
+                      }}
+                      placeholder="Min 8 characters"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      aria-label={showAdminPassword ? 'Hide password' : 'Show password'}
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--linkvesta-dark-blue)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label style={{
@@ -2316,22 +2403,48 @@ export default function AdminDashboardPage() {
                   }}>
                     Confirm Password *
                   </label>
-                  <input
-                    type="password"
-                    required
-                    minLength={8}
-                    value={adminForm.confirmPassword}
-                    onChange={(e) => setAdminForm({ ...adminForm, confirmPassword: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '0.625rem',
-                      border: '2px solid #e5e7eb',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem',
-                      boxSizing: 'border-box'
-                    }}
-                    placeholder="Confirm password"
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showAdminConfirmPassword ? 'text' : 'password'}
+                      required
+                      minLength={8}
+                      value={adminForm.confirmPassword}
+                      onChange={(e) => setAdminForm({ ...adminForm, confirmPassword: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '0.625rem 3.25rem 0.625rem 0.625rem',
+                        border: '2px solid #e5e7eb',
+                        borderRadius: '8px',
+                        fontSize: '0.9rem',
+                        boxSizing: 'border-box'
+                      }}
+                      placeholder="Confirm password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminConfirmPassword(!showAdminConfirmPassword)}
+                      aria-label={showAdminConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--linkvesta-dark-blue)',
+                        cursor: 'pointer',
+                        padding: '0.25rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
               <button
@@ -2602,31 +2715,14 @@ export default function AdminDashboardPage() {
             </div>
           ) : (
             <div>
-              {businesses.map((business, index) => (
+              {businesses.map((business, index) => {
+                const emailVerification = getBusinessEmailVerification(business);
+
+                return (
                 <div
                   key={business.id}
                   onClick={() => {
-                    // Find the user associated with this business
-                    let associatedUser = null;
-                    
-                    if (business.description) {
-                      const emailMatch = business.description.match(/submitted by\s+([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
-                      if (emailMatch && emailMatch[1]) {
-                        const email = emailMatch[1].toLowerCase().trim();
-                        associatedUser = users.find(u => 
-                          u.accountType === 'startup' && 
-                          u.email?.toLowerCase().trim() === email
-                        );
-                      }
-                    }
-                    
-                    if (!associatedUser) {
-                      associatedUser = users.find(u => 
-                        u.accountType === 'startup' && 
-                        u.name?.toLowerCase().trim() === business.name?.toLowerCase().trim()
-                      );
-                    }
-                    
+                    const associatedUser = findAssociatedUserForBusiness(business);
                     if (associatedUser) {
                       setSelectedUser(associatedUser);
                       setShowUserDetails(true);
@@ -2719,7 +2815,24 @@ export default function AdminDashboardPage() {
                       }}>
                         {business.category}
                       </span>
+                      <span style={{
+                        color: emailVerification.color,
+                        fontSize: '0.875rem',
+                        fontWeight: '500'
+                      }}>
+                        {emailVerification.label}
+                      </span>
                     </div>
+                    {emailVerification.label === '⚠ Email Unknown' && (
+                      <p style={{
+                        margin: '0 0 0.5rem 0',
+                        fontSize: '0.75rem',
+                        color: '#b45309',
+                        fontWeight: '500'
+                      }}>
+                        Link the business to a startup user or update the description to include “submitted by email”.
+                      </p>
+                    )}
                     {business.description && (
                       <p style={{
                         color: '#6b7280',
@@ -2744,27 +2857,7 @@ export default function AdminDashboardPage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          // Find the user associated with this business
-                          let associatedUser = null;
-                          
-                          if (business.description) {
-                            const emailMatch = business.description.match(/submitted by\s+([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
-                            if (emailMatch && emailMatch[1]) {
-                              const email = emailMatch[1].toLowerCase().trim();
-                              associatedUser = users.find(u => 
-                                u.accountType === 'startup' && 
-                                u.email?.toLowerCase().trim() === email
-                              );
-                            }
-                          }
-                          
-                          if (!associatedUser) {
-                            associatedUser = users.find(u => 
-                              u.accountType === 'startup' && 
-                              u.name?.toLowerCase().trim() === business.name?.toLowerCase().trim()
-                            );
-                          }
-                          
+                          const associatedUser = findAssociatedUserForBusiness(business);
                           if (associatedUser) {
                             setSelectedUser(associatedUser);
                             setShowUserDetails(true);
@@ -2804,15 +2897,15 @@ export default function AdminDashboardPage() {
                       {!business.approved && (
                         <>
                           <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Start the approval wizard for pending businesses
-                            setSelectedBusinessForWizard(business);
-                            setWizardDescription(business.description || '');
-                            setWizardCategory(business.category || 'Other');
-                            setWizardStep(1);
-                            setShowBusinessWizard(true);
-                          }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Start the approval wizard for pending businesses
+                              setSelectedBusinessForWizard(business);
+                              setWizardDescription(business.description || '');
+                              setWizardCategory(business.category || 'Other');
+                              setWizardStep(1);
+                              setShowBusinessWizard(true);
+                            }}
                             style={{
                               padding: '0.5rem 1rem',
                               backgroundColor: 'var(--linkvesta-gold)',
@@ -2896,7 +2989,8 @@ export default function AdminDashboardPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>
@@ -2998,7 +3092,10 @@ export default function AdminDashboardPage() {
             </div>
           ) : (
             <div>
-              {investors.map((investor, index) => (
+              {investors.map((investor, index) => {
+                const canApproveInvestor = investor.emailVerified;
+
+                return (
                 <div
                   key={investor.id}
                   onClick={() => {
@@ -3108,22 +3205,29 @@ export default function AdminDashboardPage() {
                     {!investor.approved && (
                       <>
                         <button
-                          onClick={() => handleApproveInvestor(investor.id)}
+                          onClick={() => {
+                            if (!canApproveInvestor) return;
+                            handleApproveInvestor(investor.id);
+                          }}
                           style={{
                             padding: '0.5rem 1rem',
-                            backgroundColor: '#10b981',
+                            backgroundColor: canApproveInvestor ? '#10b981' : '#9ca3af',
                             color: 'white',
                             border: 'none',
                             borderRadius: '6px',
                             fontSize: '0.875rem',
                             fontWeight: '500',
-                            cursor: 'pointer',
+                            cursor: canApproveInvestor ? 'pointer' : 'not-allowed',
                             transition: 'background-color 0.2s'
                           }}
+                          disabled={!canApproveInvestor}
+                          title={canApproveInvestor ? 'Approve investor' : 'Email must be verified before approval'}
                           onMouseEnter={(e) => {
+                            if (!canApproveInvestor) return;
                             e.currentTarget.style.backgroundColor = '#059669';
                           }}
                           onMouseLeave={(e) => {
+                            if (!canApproveInvestor) return;
                             e.currentTarget.style.backgroundColor = '#10b981';
                           }}
                         >
@@ -3167,7 +3271,8 @@ export default function AdminDashboardPage() {
                     )}
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
         </div>

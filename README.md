@@ -83,15 +83,42 @@ linkvesta/
    - For production deployments, set `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_AUTH_URL` to your actual domain or server IP
    - Change `JWT_SECRET` to a secure random string in production
 
-3. **Start all services with Docker Compose**
+3. **Start all services (one command)**
    ```bash
-   docker-compose up -d
+   npm run dev
+   ```
+4. **Verify services are healthy (recommended)**
+   ```bash
+   npm run dev:check
    ```
 
 4. **Access the application**
    - Frontend: http://localhost:3000
    - API Service: http://localhost:3001
    - Auth Service: http://localhost:3002
+
+### Running on a Different Local Machine (Quick Guide)
+
+Use this when you want to run the app on another PC on the same network.
+
+1. **Clone and install**
+   - Clone the repo and run `npm run install:all`
+2. **Create a root `.env`**
+   - Copy the template from the Docker section above
+   - Set these to the host machine's LAN IP (not localhost):
+     - `NEXT_PUBLIC_API_URL=http://<HOST_LAN_IP>:3001`
+     - `NEXT_PUBLIC_AUTH_URL=http://<HOST_LAN_IP>:3002`
+     - `FRONTEND_URL=http://<HOST_LAN_IP>:3000`
+3. **Optional: set email link override**
+   - `EMAIL_FRONTEND_URL=http://<HOST_LAN_IP>:3000`
+4. **Start services**
+   - `npm run dev`
+5. **Open in a browser on the other machine**
+   - `http://<HOST_LAN_IP>:3000`
+
+**Notes**
+- Ensure Windows Firewall allows inbound traffic on ports 3000, 3001, and 3002.
+- If ports are already in use, change `FRONTEND_PORT`, `API_PORT`, `AUTH_PORT` in `.env`.
 
 ### Option 2: Local Development
 
@@ -124,7 +151,12 @@ linkvesta/
 
    **Start all services:**
    ```bash
-   npm run dev
+   npm run dev:local
+   ```
+   
+   **Verify services are healthy (recommended):**
+   ```bash
+   npm run dev:check
    ```
 
    **Or start individually:**
@@ -304,7 +336,7 @@ This application is designed to run on any machine. Here are key points for port
 - [ ] Set AWS credentials (if using S3 storage)
 - [ ] Set JWT secret (use a secure random string)
 - [ ] Update API URLs if deploying to a server
-- [ ] Run `docker-compose up -d` or follow local development setup
+- [ ] Run `npm run dev` (Docker) or follow local development setup
 
 ## License
 

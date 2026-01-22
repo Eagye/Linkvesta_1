@@ -38,12 +38,18 @@ const createTransporter = () => {
   return null;
 };
 
-export const sendVerificationEmail = async (email: string, verificationToken: string, name?: string): Promise<boolean> => {
+export const sendVerificationEmail = async (
+  email: string,
+  verificationToken: string,
+  name?: string,
+  frontendUrlOverride?: string
+): Promise<boolean> => {
   console.log('Attempting to send verification email to:', email);
   console.log('SMTP Configuration check:', {
     SMTP_USER: process.env.SMTP_USER ? 'Set' : 'Not set',
     SMTP_PASS: process.env.SMTP_PASS ? 'Set' : 'Not set',
     SMTP_HOST: process.env.SMTP_HOST || 'Not set (using Gmail)',
+    EMAIL_FRONTEND_URL: process.env.EMAIL_FRONTEND_URL || 'Not set',
     FRONTEND_URL: process.env.FRONTEND_URL || 'Not set'
   });
   
@@ -57,7 +63,23 @@ export const sendVerificationEmail = async (email: string, verificationToken: st
   
   console.log('Email transporter created successfully');
 
-  const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
+  const frontendUrlOverrideTrimmed =
+    frontendUrlOverride && frontendUrlOverride.trim().length > 0 ? frontendUrlOverride.trim() : null;
+  const frontendUrl =
+    frontendUrlOverrideTrimmed ||
+    process.env.EMAIL_FRONTEND_URL ||
+    process.env.FRONTEND_URL ||
+    'http://localhost:3000';
+  const normalizedFrontendUrl = frontendUrl.endsWith('/') ? frontendUrl.slice(0, -1) : frontendUrl;
+  const verificationUrl = `${normalizedFrontendUrl}/verify-email?token=${verificationToken}`;
+  const urlSource = frontendUrlOverrideTrimmed
+    ? 'request-origin'
+    : process.env.EMAIL_FRONTEND_URL
+      ? 'EMAIL_FRONTEND_URL'
+      : process.env.FRONTEND_URL
+        ? 'FRONTEND_URL'
+        : 'default';
+  console.log(`Verification email link source: ${urlSource} (${normalizedFrontendUrl})`);
   
   const mailOptions = {
     from: process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@linkvesta.com',

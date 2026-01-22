@@ -45,6 +45,7 @@ function RegisterFormContent() {
     password: '',
     confirmPassword: '',
     country: '',
+    businessDescription: '',
     tin: '',
     businessRegistrationDocument: null as File | null,
     termsAgreed: false
@@ -54,6 +55,8 @@ function RegisterFormContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTermsDialog, setShowTermsDialog] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState<{ score: number; feedback: string[] } | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; isVisible: boolean }>({
     message: '',
     type: 'info',
@@ -124,7 +127,7 @@ function RegisterFormContent() {
     }
   }, [formData.country]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
 
@@ -246,6 +249,11 @@ function RegisterFormContent() {
       if (!firstError) firstError = getDisposableEmailMessage();
     }
 
+    if (accountType === 'startup' && !formData.businessDescription.trim()) {
+      newErrors.businessDescription = 'Business description is required';
+      if (!firstError) firstError = 'Please provide a brief description of your business to continue.';
+    }
+
     if (!formData.password) {
       newErrors.password = 'Password is required';
       if (!firstError) firstError = 'Please create a password for your account.';
@@ -338,6 +346,7 @@ function RegisterFormContent() {
         formData.phoneNumber,
         formData.country,
         accountTypeParam,
+        formData.businessDescription || undefined,
         formData.tin || undefined,
         formData.businessRegistrationDocument || undefined
       );
@@ -350,9 +359,7 @@ function RegisterFormContent() {
           router.push('/register/verify-instructions');
         }, 3000);
       } else if (response.token) {
-        // Legacy support: if token is provided, store it
-        localStorage.setItem('token', response.token);
-        localStorage.setItem('user', JSON.stringify(response.user));
+        // Cookie-based auth: token may be returned for compatibility
         showToast('Welcome to Linkvesta! Your account has been created successfully. You are now logged in.', 'success');
         setTimeout(() => {
           router.push('/');
@@ -377,6 +384,8 @@ function RegisterFormContent() {
           friendlyMessage = 'An account with this email address already exists. Please use a different email or try logging in.';
         } else if (backendError.includes('disposable') || backendError.includes('temporary') || backendError.includes('permanent email')) {
           friendlyMessage = getDisposableEmailMessage();
+        } else if (backendError.toLowerCase().includes('business description')) {
+          friendlyMessage = 'Please provide a brief description of your business (max 280 characters).';
         } else if (backendError.includes('TIN') || backendError.includes('Tax Identification')) {
           friendlyMessage = 'Please provide your Tax Identification Number (TIN) to complete your business registration.';
         } else if (backendError.includes('Business registration document') || backendError.includes('PDF')) {
@@ -525,6 +534,91 @@ function RegisterFormContent() {
             )}
           </div>
 
+          {/* Business Description (Startup/SME only) */}
+          {accountType === 'startup' && (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label
+                htmlFor="businessDescription"
+                style={{
+                  display: 'block',
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  color: 'var(--linkvesta-dark-blue)',
+                  marginBottom: '0.5rem'
+                }}
+              >
+                Business Description <span style={{ color: '#ef4444' }}>*</span>
+                <span style={{ 
+                  fontSize: '0.75rem', 
+                  fontWeight: '400', 
+                  color: '#6b7280',
+                  marginLeft: '0.5rem',
+                  fontStyle: 'italic'
+                }}>
+                  (Required)
+                </span>
+              </label>
+              <textarea
+                id="businessDescription"
+                name="businessDescription"
+                value={formData.businessDescription}
+                onChange={handleChange}
+                maxLength={280}
+                rows={3}
+                required
+                style={{
+                  width: '100%',
+                  padding: '0.875rem 1rem',
+                  border: `2px solid ${errors.businessDescription ? '#ef4444' : '#e5e7eb'}`,
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  color: 'var(--linkvesta-dark-blue)',
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                  backgroundColor: '#ffffff',
+                  resize: 'vertical'
+                }}
+                placeholder="Briefly describe your business (max 280 characters)"
+                onFocus={(e) => {
+                  if (!errors.businessDescription) {
+                    e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(26, 35, 50, 0.1)';
+                  }
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = errors.businessDescription ? '#ef4444' : '#e5e7eb';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+              {errors.businessDescription && (
+                <p style={{ 
+                  color: '#dc2626', 
+                  fontSize: '0.875rem', 
+                  marginTop: '0.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                  {errors.businessDescription}
+                </p>
+              )}
+              <div style={{ 
+                marginTop: '0.5rem', 
+                fontSize: '0.75rem', 
+                color: '#6b7280',
+                textAlign: 'right'
+              }}>
+                {formData.businessDescription.length}/280
+              </div>
+            </div>
+          )}
+
           {/* Email Address */}
           <div style={{ marginBottom: '1.5rem' }}>
             <label
@@ -667,50 +761,76 @@ function RegisterFormContent() {
             >
               Password <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              minLength={8}
-              style={{
-                width: '100%',
-                padding: '0.875rem 1rem',
-                border: `2px solid ${
-                  errors.password 
-                    ? '#ef4444' 
-                    : passwordStrength && formData.password
-                      ? passwordStrength.score < 2 
-                        ? '#ef4444' 
-                        : passwordStrength.score < 3 
-                          ? '#f97316' 
-                          : passwordStrength.score < 4 
-                            ? '#eab308' 
-                            : '#22c55e'
-                      : '#e5e7eb'
-                }`,
-                borderRadius: '8px',
-                fontSize: '1rem',
-                color: 'var(--linkvesta-dark-blue)',
-                boxSizing: 'border-box',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                backgroundColor: '#ffffff'
-              }}
-              placeholder="Enter a strong password"
-              onFocus={(e) => {
-                if (!errors.password) {
-                  e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(26, 35, 50, 0.1)';
-                }
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = errors.password ? '#ef4444' : '#e5e7eb';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                id="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                minLength={8}
+                style={{
+                  width: '100%',
+                  padding: '0.875rem 3.25rem 0.875rem 1rem',
+                  border: `2px solid ${
+                    errors.password 
+                      ? '#ef4444' 
+                      : passwordStrength && formData.password
+                        ? passwordStrength.score < 2 
+                          ? '#ef4444' 
+                          : passwordStrength.score < 3 
+                            ? '#f97316' 
+                            : passwordStrength.score < 4 
+                              ? '#eab308' 
+                              : '#22c55e'
+                        : '#e5e7eb'
+                  }`,
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  color: 'var(--linkvesta-dark-blue)',
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                  backgroundColor: '#ffffff'
+                }}
+                placeholder="Enter a strong password"
+                onFocus={(e) => {
+                  if (!errors.password) {
+                    e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(26, 35, 50, 0.1)';
+                  }
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = errors.password ? '#ef4444' : '#e5e7eb';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute',
+                  right: '0.5rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--linkvesta-dark-blue)',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
             
             {/* Password Strength Indicator */}
             {passwordStrength && formData.password && (
@@ -814,37 +934,63 @@ function RegisterFormContent() {
             >
               Confirm Password <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <input
-              type="password"
-              id="confirmPassword"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-              style={{
-                width: '100%',
-                padding: '0.875rem 1rem',
-                border: `2px solid ${errors.confirmPassword ? '#ef4444' : '#e5e7eb'}`,
-                borderRadius: '8px',
-                fontSize: '1rem',
-                color: 'var(--linkvesta-dark-blue)',
-                boxSizing: 'border-box',
-                transition: 'all 0.2s ease',
-                outline: 'none',
-                backgroundColor: '#ffffff'
-              }}
-              placeholder="Re-enter your password"
-              onFocus={(e) => {
-                if (!errors.confirmPassword) {
-                  e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(26, 35, 50, 0.1)';
-                }
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = errors.confirmPassword ? '#ef4444' : '#e5e7eb';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                id="confirmPassword"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                required
+                style={{
+                  width: '100%',
+                  padding: '0.875rem 3.25rem 0.875rem 1rem',
+                  border: `2px solid ${errors.confirmPassword ? '#ef4444' : '#e5e7eb'}`,
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  color: 'var(--linkvesta-dark-blue)',
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s ease',
+                  outline: 'none',
+                  backgroundColor: '#ffffff'
+                }}
+                placeholder="Re-enter your password"
+                onFocus={(e) => {
+                  if (!errors.confirmPassword) {
+                    e.currentTarget.style.borderColor = 'var(--linkvesta-dark-blue)';
+                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(26, 35, 50, 0.1)';
+                  }
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = errors.confirmPassword ? '#ef4444' : '#e5e7eb';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                style={{
+                  position: 'absolute',
+                  right: '0.5rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--linkvesta-dark-blue)',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
             {errors.confirmPassword && (
               <p style={{ 
                 color: '#dc2626', 

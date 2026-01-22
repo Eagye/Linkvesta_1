@@ -12,7 +12,7 @@ $DB_PASSWORD = if ($env:DB_PASSWORD) { $env:DB_PASSWORD } else { "postgres" }
 
 $env:PGPASSWORD = $DB_PASSWORD
 
-Write-Host "Connecting to database: $DB_NAME on $DB_HOST:$DB_PORT as $DB_USER" -ForegroundColor Yellow
+Write-Host "Connecting to database: ${DB_NAME} on ${DB_HOST}:${DB_PORT} as ${DB_USER}" -ForegroundColor Yellow
 
 # Run the migration
 $migrationFile = "backend\database\migrations\004_create_default_admin.sql"

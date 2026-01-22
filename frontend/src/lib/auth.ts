@@ -8,6 +8,7 @@ export const authClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 // Auth Service methods
@@ -19,6 +20,7 @@ export const authService = {
     phoneNumber?: string, 
     country?: string, 
     accountType?: string | null,
+    businessDescription?: string,
     tin?: string,
     businessRegistrationDocument?: File
   ) {
@@ -31,6 +33,7 @@ export const authService = {
       if (phoneNumber) formData.append('phoneNumber', phoneNumber);
       if (country) formData.append('country', country);
       if (accountType) formData.append('accountType', accountType);
+      if (businessDescription) formData.append('businessDescription', businessDescription);
       if (tin) formData.append('tin', tin);
       formData.append('businessRegistrationDocument', businessRegistrationDocument);
 
@@ -48,6 +51,7 @@ export const authService = {
         phoneNumber,
         country,
         accountType,
+        businessDescription,
         tin,
       });
       return response.data;
@@ -62,6 +66,11 @@ export const authService = {
     return response.data;
   },
 
+  async verifySession() {
+    const response = await authClient.post('/api/auth/verify', {});
+    return response.data;
+  },
+
   // Admin-specific authentication methods
   async adminLogin(email: string, password: string) {
     const response = await authClient.post('/api/auth/admin/login', {
@@ -73,15 +82,22 @@ export const authService = {
 
   // Create admin (requires authentication token)
   async createAdmin(email: string, password: string, name?: string, token?: string) {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
     const response = await authClient.post('/api/auth/admin/create', {
       email,
       password,
       name,
     }, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers,
     });
+    return response.data;
+  },
+
+  async logout() {
+    const response = await authClient.post('/api/auth/logout');
     return response.data;
   },
 };

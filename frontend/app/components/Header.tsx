@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { authService } from '@/src/lib/auth';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -39,59 +40,47 @@ export default function Header() {
   };
 
   useEffect(() => {
-    // Check if user is logged in
-    const checkUser = () => {
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        try {
-          setUser(JSON.parse(userData));
-        } catch (e) {
-          // Invalid user data
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
+    let isMounted = true;
+    const loadSession = async () => {
+      try {
+        const response = await authService.verifySession();
+        if (isMounted && response?.valid) {
+          setUser(response.user);
+        } else if (isMounted) {
           setUser(null);
         }
-      } else {
-        setUser(null);
+      } catch {
+        if (isMounted) setUser(null);
       }
     };
 
-    checkUser();
+    loadSession();
 
-    // Listen for storage changes (e.g., login from another tab)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'user' || e.key === 'token') {
-        checkUser();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    // Also listen for custom events (for same-tab updates)
     const handleUserUpdate = () => {
-      checkUser();
+      loadSession();
     };
 
     window.addEventListener('userLogin', handleUserUpdate);
     window.addEventListener('userLogout', handleUserUpdate);
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      isMounted = false;
       window.removeEventListener('userLogin', handleUserUpdate);
       window.removeEventListener('userLogout', handleUserUpdate);
     };
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-    
-    // Dispatch event to update header
-    window.dispatchEvent(new Event('userLogout'));
-    
-    router.push('/');
-    router.refresh();
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+    } catch (err) {
+      console.warn('Logout failed, clearing session locally.');
+    } finally {
+      setUser(null);
+      window.dispatchEvent(new Event('userLogout'));
+      router.push('/');
+      router.refresh();
+    }
   };
 
   return (

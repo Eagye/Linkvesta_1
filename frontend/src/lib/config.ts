@@ -9,6 +9,11 @@ export const getApiUrl = (): string => {
     if (win.__LINKVESTA_CONFIG__?.apiUrl) {
       return win.__LINKVESTA_CONFIG__.apiUrl;
     }
+
+    const { protocol, hostname } = window.location;
+    if (hostname) {
+      return `${protocol}//${hostname}:3001`;
+    }
   }
   
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -20,6 +25,11 @@ export const getAuthUrl = (): string => {
     const win = window as any;
     if (win.__LINKVESTA_CONFIG__?.authUrl) {
       return win.__LINKVESTA_CONFIG__.authUrl;
+    }
+
+    const { protocol, hostname } = window.location;
+    if (hostname) {
+      return `${protocol}//${hostname}:3002`;
     }
   }
   

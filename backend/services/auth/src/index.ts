@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
@@ -26,9 +27,16 @@ dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3002;
-const JWT_SECRET: string = process.env.JWT_SECRET || 'your_jwt_secret_key_here';
+const PORT = Number(process.env.AUTH_PORT || 3002);
+const JWT_SECRET: string | undefined = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required and must be set in the environment.');
+}
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d';
+const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'lv_auth';
+const AUTH_COOKIE_MAX_AGE_MS = Number(process.env.AUTH_COOKIE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000);
+const AUTH_COOKIE_SAMESITE = (process.env.AUTH_COOKIE_SAMESITE || 'lax') as 'lax' | 'strict' | 'none';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 // Create uploads directory if it doesn't exist
 // Use process.cwd() to get project root, then navigate to uploads folder
@@ -69,6 +77,9 @@ if (process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production')
 
 // Security middleware - must be applied early
 app.use(configureSecurityHeaders());
+
+// Parse cookies for auth/session handling
+app.use(cookieParser());
 
 // CORS configuration - restrict origins properly
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://127.0.0.1:3000'];
@@ -130,6 +141,29 @@ function generateToken(userId: number, email: string, role: string): string {
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
+}
+
+function setAuthCookie(res: Response, token: string) {
+  res.cookie(AUTH_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: IS_PRODUCTION || process.env.AUTH_COOKIE_SECURE === 'true',
+    sameSite: AUTH_COOKIE_SAMESITE,
+    maxAge: AUTH_COOKIE_MAX_AGE_MS,
+    path: '/'
+  });
+}
+
+function clearAuthCookie(res: Response) {
+  res.clearCookie(AUTH_COOKIE_NAME, { path: '/' });
+}
+
+function getTokenFromRequest(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  const tokenFromCookie = (req as any).cookies?.[AUTH_COOKIE_NAME];
+  return tokenFromCookie || null;
 }
 
 // Helper function to log security events
@@ -224,12 +258,11 @@ async function resetFailedLoginAttempts(userId: number, ipAddress: string | unde
 // Middleware to verify JWT token and check admin role
 function authenticateAdmin(req: Request, res: Response, next: Function) {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = getTokenFromRequest(req);
+    if (!token) {
       return res.status(401).json({ error: 'Authorization token required' });
     }
 
-    const token = authHeader.substring(7);
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; email: string; role: string };
 
     if (decoded.role !== 'admin') {
@@ -249,7 +282,7 @@ function authenticateAdmin(req: Request, res: Response, next: Function) {
 // Regular User Registration
 app.post('/api/auth/register', registrationLimiter, upload.single('businessRegistrationDocument'), async (req: Request, res: Response) => {
   try {
-    const { email, password, name, phoneNumber, country, accountType, tin } = req.body;
+    const { email, password, name, phoneNumber, country, accountType, businessDescription, tin } = req.body;
     const businessRegistrationDocument = req.file;
 
     // Validation
@@ -288,8 +321,21 @@ app.post('/api/auth/register', registrationLimiter, upload.single('businessRegis
       });
     }
 
+    const normalizedBusinessDescription = businessDescription?.trim() || null;
+    if (normalizedBusinessDescription && normalizedBusinessDescription.length > 280) {
+      return res.status(400).json({
+        error: 'Business description must be 280 characters or less.'
+      });
+    }
+
     // For startup/SME accounts, TIN and business registration document are required
     if (accountType === 'startup') {
+      if (!normalizedBusinessDescription) {
+        return res.status(400).json({ 
+          error: 'Please provide a brief description of your business (max 280 characters).' 
+        });
+      }
+
       if (!tin || !tin.trim()) {
         return res.status(400).json({ 
           error: 'To complete your business registration, please provide your Tax Identification Number (TIN).' 
@@ -398,7 +444,24 @@ app.post('/api/auth/register', registrationLimiter, upload.single('businessRegis
 
     // Send verification email
     console.log(`Attempting to send verification email to: ${email}`);
-    const emailSent = await sendVerificationEmail(email, verificationToken, name || undefined);
+    const originHeader = req.get('origin');
+    let emailFrontendUrl: string | undefined = originHeader || undefined;
+    if (!emailFrontendUrl) {
+      const refererHeader = req.get('referer');
+      if (refererHeader) {
+        try {
+          emailFrontendUrl = new URL(refererHeader).origin;
+        } catch {
+          // Ignore invalid referer
+        }
+      }
+    }
+    const emailSent = await sendVerificationEmail(
+      email,
+      verificationToken,
+      name || undefined,
+      emailFrontendUrl
+    );
     if (!emailSent) {
       console.error(`Failed to send verification email to ${email}, but user was created.`);
       console.error('User can request resend later via the resend verification endpoint.');
@@ -417,7 +480,7 @@ app.post('/api/auth/register', registrationLimiter, upload.single('businessRegis
           [
             name, // Business name (using user's name/company name)
             'Other', // Default category - admin must update before approval
-            null, // Description must be set by admin before approval
+            normalizedBusinessDescription, // Optional user-provided description
             '#6b7280' // Default gray color
           ]
         );
@@ -610,6 +673,7 @@ app.post('/api/auth/login', authLimiter, async (req: Request, res: Response) => 
     // Generate token
     const token = generateToken(user.id, user.email, user.role);
 
+    setAuthCookie(res, token);
     res.json({
       message: 'Login successful',
       user: {
@@ -720,6 +784,7 @@ app.post('/api/auth/admin/login', authLimiter, async (req: Request, res: Respons
     // Generate token
     const token = generateToken(user.id, user.email, user.role);
 
+    setAuthCookie(res, token);
     res.json({
       message: 'Admin login successful',
       user: {
@@ -805,12 +870,13 @@ app.post('/api/auth/admin/create', authenticateAdmin, async (req: Request, res: 
 app.post('/api/auth/verify', async (req: Request, res: Response) => {
   try {
     const { token } = req.body;
+    const requestToken = token || getTokenFromRequest(req);
 
-    if (!token) {
+    if (!requestToken) {
       return res.status(400).json({ error: 'Token is required' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; email: string; role: string };
+    const decoded = jwt.verify(requestToken, JWT_SECRET) as { userId: number; email: string; role: string };
 
     // Get fresh user data
     const result = await pool.query(
@@ -841,6 +907,12 @@ app.post('/api/auth/verify', async (req: Request, res: Response) => {
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
+});
+
+// Logout - clear auth cookie
+app.post('/api/auth/logout', async (req: Request, res: Response) => {
+  clearAuthCookie(res);
+  res.json({ message: 'Logged out' });
 });
 
 // Email Verification Endpoint
@@ -948,7 +1020,24 @@ app.post('/api/auth/resend-verification', emailResendLimiter, async (req: Reques
     );
 
     // Send verification email
-    const emailSent = await sendVerificationEmail(user.email, verificationToken, user.name || undefined);
+    const originHeader = req.get('origin');
+    let emailFrontendUrl: string | undefined = originHeader || undefined;
+    if (!emailFrontendUrl) {
+      const refererHeader = req.get('referer');
+      if (refererHeader) {
+        try {
+          emailFrontendUrl = new URL(refererHeader).origin;
+        } catch {
+          // Ignore invalid referer
+        }
+      }
+    }
+    const emailSent = await sendVerificationEmail(
+      user.email,
+      verificationToken,
+      user.name || undefined,
+      emailFrontendUrl
+    );
     
     if (emailSent) {
       res.status(200).json({ 
@@ -1013,6 +1102,24 @@ app.post('/api/auth/investors/:id/approve', authenticateAdmin, async (req: Reque
 
     if (isNaN(investorId)) {
       return res.status(400).json({ error: 'Invalid investor ID' });
+    }
+
+    // Ensure investor email is verified before approval
+    const verificationResult = await pool.query(
+      `SELECT i.id, i.user_id, u.email_verified
+       FROM investors i
+       LEFT JOIN users u ON i.user_id = u.id
+       WHERE i.id = $1`,
+      [investorId]
+    );
+
+    if (verificationResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Investor not found' });
+    }
+
+    const investorVerification = verificationResult.rows[0];
+    if (!investorVerification.email_verified) {
+      return res.status(400).json({ error: 'Investor email must be verified before approval.' });
     }
 
     // Update investor approval status
@@ -1260,7 +1367,7 @@ app.use(errorSanitizer);
 
 app.listen(PORT, () => {
   console.log(`Auth Service running on port ${PORT}`);
-  console.log(`JWT Secret configured: ${JWT_SECRET ? 'Yes' : 'No (using default - CHANGE IN PRODUCTION!)'}`);
+  console.log(`JWT Secret configured: ${JWT_SECRET ? 'Yes' : 'No'}`);
   console.log(`Security features: Rate limiting, Account lockout, Password validation, Security headers enabled`);
   
   // Log email configuration status

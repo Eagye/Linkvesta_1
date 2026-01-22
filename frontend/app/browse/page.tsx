@@ -40,6 +40,17 @@ export default function BrowsePage() {
       
       console.log('Fetching businesses from:', url, 'or', `${apiUrl}/api/businesses`);
       
+      const fetchDirect = async () => {
+        const directUrl = `${apiUrl}/api/businesses`;
+        return axios.get(directUrl, {
+          timeout: 30000,
+          validateStatus: (status) => status < 500,
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+      };
+
       let response;
       try {
         // Try Next.js rewrite first
@@ -49,19 +60,17 @@ export default function BrowsePage() {
         });
       } catch (rewriteError: any) {
         console.log('Next.js rewrite failed, trying direct API:', rewriteError.message);
-        // Fallback to direct API call
-        url = `${apiUrl}/api/businesses`;
-        response = await axios.get(url, {
-          timeout: 30000,
-          validateStatus: (status) => status < 500,
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
+        response = await fetchDirect();
       }
       
       console.log('Businesses API response:', response.status, response.data);
       
+      if (!(response.data && Array.isArray(response.data))) {
+        console.warn('Rewrite response invalid, trying direct API...', response.data);
+        response = await fetchDirect();
+        console.log('Direct API response:', response.status, response.data);
+      }
+
       if (response.data && Array.isArray(response.data)) {
         console.log(`Loaded ${response.data.length} businesses`);
         setBusinesses(response.data);
@@ -78,53 +87,7 @@ export default function BrowsePage() {
         status: error?.response?.status,
         url: error?.config?.url
       });
-      
-      // Fallback to default businesses if API fails
-      console.log('Using fallback businesses');
-      setBusinesses([
-        {
-          id: 1,
-          name: 'AgriFlow Tech',
-          category: 'Agri-Tech',
-          description: 'Digitizing farm-to-market logistics in Northern Ghana.',
-          categoryColor: '#10b981'
-        },
-        {
-          id: 2,
-          name: 'PaySwift Africa',
-          category: 'Fintech',
-          description: 'Cross-border payments for SME intra-Africa trade.',
-          categoryColor: '#3b82f6'
-        },
-        {
-          id: 3,
-          name: 'HealthConnect',
-          category: 'Health-Tech',
-          description: 'Telemedicine platform connecting rural clinics to specialists.',
-          categoryColor: '#ef4444'
-        },
-        {
-          id: 4,
-          name: 'Solarify',
-          category: 'Energy',
-          description: 'Pay-as-you-go solar solutions for off-grid communities.',
-          categoryColor: '#fbbf24'
-        },
-        {
-          id: 5,
-          name: 'EduLearn',
-          category: 'Ed-Tech',
-          description: 'AI-driven personalized learning for WASSCE students.',
-          categoryColor: '#a855f7'
-        },
-        {
-          id: 6,
-          name: 'LogiTrak',
-          category: 'Logistics',
-          description: 'Last-mile delivery infrastructure for e-commerce.',
-          categoryColor: '#6b7280'
-        }
-      ]);
+      setBusinesses([]);
     } finally {
       setLoading(false);
     }
@@ -247,9 +210,52 @@ export default function BrowsePage() {
           <div style={{ color: 'var(--linkvesta-dark-blue)', fontSize: '1.25rem', textAlign: 'center', padding: '3rem' }}>
             Loading businesses...
           </div>
+        ) : businesses.length === 0 ? (
+          <div style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: '12px',
+            padding: 'clamp(2rem, 6vw, 3.5rem)',
+            backgroundColor: '#f9fafb',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--linkvesta-white)',
+              border: '1px solid #e5e7eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1rem',
+              color: '#9ca3af',
+              fontSize: '1.5rem',
+              fontWeight: 'bold'
+            }}>
+              LV
+            </div>
+            <h2 style={{
+              color: 'var(--linkvesta-dark-blue)',
+              fontSize: 'clamp(1.25rem, 3vw, 1.75rem)',
+              fontWeight: 'bold',
+              margin: 0
+            }}>
+              No businesses yet
+            </h2>
+            <p style={{
+              color: 'var(--linkvesta-dark-blue)',
+              fontSize: 'clamp(1rem, 2.5vw, 1.125rem)',
+              opacity: 0.75,
+              margin: '0.75rem auto 0',
+              maxWidth: '520px'
+            }}>
+              Businesses will appear here after they are added and approved by the admin team.
+              Please check back soon.
+            </p>
+          </div>
         ) : filteredBusinesses.length === 0 ? (
           <div style={{ color: 'var(--linkvesta-dark-blue)', fontSize: '1.25rem', textAlign: 'center', padding: '3rem' }}>
-            No businesses found
+            No businesses found for this category
           </div>
         ) : (
           <div style={{
